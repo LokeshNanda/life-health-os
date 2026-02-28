@@ -1,0 +1,56 @@
+# Dependencies
+node_modules
+.pnp
+.pnp.js
+
+# Build
+.next
+out
+build
+dist
+*.tsbuildinfo
+
+# Env (use .env.example as template)
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env*.local
+
+# Debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Testing
+playwright-report/
+test-results/
+blob-report/
+playwright/.cache/
+
+# IDE
+.idea
+.vscode
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+AI_BEHAVIOR.md
+UI_UX_GUIDELINES.md
+SECURITY_AND_PRIVACY.md
+REDIS_SCHEMA.md
+API_CONTRACT.md
+ARCHITECTURE.md
+CURSOR_RULES.md
+DATA_MODEL.md
+NON_GOALS.md
+PRODUCT_VISION.md
+
+# clerk configuration (can include secrets)
+/.clerk/
+.cursor/

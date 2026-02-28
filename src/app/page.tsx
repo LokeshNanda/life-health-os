@@ -38,6 +38,24 @@ export default function HomePage() {
               View your health events chronologically
             </p>
           </Link>
+          <Link
+            href="/chat"
+            className="glass-panel glass-panel-glow rounded-xl p-4 transition-all duration-300 hover:border-neon-cyan/40 hover:shadow-glow-soft animate-fade-slide-up [animation-delay:0.2s]"
+          >
+            <span className="font-medium text-neon-cyan">AI Chat</span>
+            <p className="mt-1 text-sm text-[var(--text-muted)]">
+              Ask questions about your health records
+            </p>
+          </Link>
+          <Link
+            href="/summarize"
+            className="glass-panel glass-panel-glow rounded-xl p-4 transition-all duration-300 hover:border-neon-cyan/40 hover:shadow-glow-soft animate-fade-slide-up [animation-delay:0.25s]"
+          >
+            <span className="font-medium text-neon-cyan">Summarize</span>
+            <p className="mt-1 text-sm text-[var(--text-muted)]">
+              Create a condensed summary of your records
+            </p>
+          </Link>
         </div>
       </SignedIn>
       <SignedOut>

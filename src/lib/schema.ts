@@ -12,4 +12,5 @@ export const keys = {
   summary: (userId: string, version: number) => `user:${userId}:summary:${version}`,
   meta: (userId: string) => `user:${userId}:meta`,
   summaryVersions: (userId: string) => `user:${userId}:summary_versions`,
+  deleted: (userId: string) => `user:${userId}:deleted`,
 } as const;

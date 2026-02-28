@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { summarize, getMemoryStats } from "@/lib/api";
+import { SummarizeSkeleton } from "@/components/Skeleton";
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -11,6 +12,7 @@ function formatBytes(bytes: number): string {
 
 export default function SummarizePage() {
   const [loading, setLoading] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
   const [result, setResult] = useState<{
     version: number;
     sizeBefore: number;
@@ -27,6 +29,8 @@ export default function SummarizePage() {
       setStats(s);
     } catch {
       setStats(null);
+    } finally {
+      setInitialLoading(false);
     }
   }
 
@@ -47,6 +51,17 @@ export default function SummarizePage() {
     } finally {
       setLoading(false);
     }
+  }
+
+  if (initialLoading) {
+    return (
+      <div className="max-w-2xl">
+        <h1 className="text-2xl font-semibold text-[var(--text-primary)] mb-6">
+          Summarize Memory
+        </h1>
+        <SummarizeSkeleton />
+      </div>
+    );
   }
 
   return (

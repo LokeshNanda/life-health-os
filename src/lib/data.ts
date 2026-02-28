@@ -19,12 +19,24 @@ export async function addEvent(userId: string, event: HealthEvent): Promise<stri
 
 export async function getEvents(userId: string, count = 100): Promise<HealthEvent[]> {
   const streamKey = keys.events(userId);
-  const results = await redis.xrange<{ data: string | HealthEvent }>(streamKey, "-", "+", count);
-  return Object.values(results).map((fields) => {
-    const data = fields.data;
-    if (typeof data === "object" && data !== null) return data as HealthEvent;
-    return JSON.parse(data as string) as HealthEvent;
-  });
+  const deletedKey = keys.deleted(userId);
+  const [results, deletedIds] = await Promise.all([
+    redis.xrange<{ data: string | HealthEvent }>(streamKey, "-", "+", count),
+    redis.smembers(deletedKey),
+  ]);
+  const deletedSet = new Set(deletedIds ?? []);
+  const events = Object.values(results)
+    .map((fields) => {
+      const data = fields.data;
+      if (typeof data === "object" && data !== null) return data as HealthEvent;
+      return JSON.parse(data as string) as HealthEvent;
+    })
+    .filter((e) => !deletedSet.has(e.id));
+  return events;
+}
+
+export async function deleteEvent(userId: string, eventId: string): Promise<void> {
+  await redis.sadd(keys.deleted(userId), eventId);
 }
 
 export async function getEventCount(userId: string): Promise<number> {
@@ -55,17 +67,14 @@ export async function saveSummary(userId: string, summary: Summary): Promise<voi
 }
 
 export async function getMemoryStats(userId: string): Promise<MemoryStats> {
-  const [entries, lastSummary] = await Promise.all([
-    getEventCount(userId),
+  const [events, lastSummary] = await Promise.all([
+    getEvents(userId),
     getLatestSummary(userId),
   ]);
 
-  const events = await getEvents(userId);
-  const rawSize = JSON.stringify(events).length;
-
   return {
-    size: rawSize,
-    entries,
+    size: JSON.stringify(events).length,
+    entries: events.length,
     lastSummarized: lastSummary?.createdAt ?? null,
     summaryVersion: lastSummary?.version ?? null,
   };

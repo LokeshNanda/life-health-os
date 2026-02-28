@@ -61,6 +61,27 @@ export async function getEvents() {
   return res.json();
 }
 
+export async function deleteMemory(eventId: string) {
+  const res = await fetch(`/api/memory/${encodeURIComponent(eventId)}`, fetchOptions({
+    method: "DELETE",
+  }));
+  if (!res.ok) {
+    const data = await res.json();
+    throw new Error(data.error ?? "Failed to delete memory");
+  }
+  return res.json();
+}
+
+export async function getExportData(): Promise<{
+  exportedAt: string;
+  events: unknown[];
+  summary: { content: string; version: number; createdAt: string } | null;
+}> {
+  const res = await fetch("/api/export", fetchOptions());
+  if (!res.ok) throw new Error("Failed to export");
+  return res.json();
+}
+
 export async function summarize() {
   const res = await fetch("/api/summarize", fetchOptions({
     method: "POST",

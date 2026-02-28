@@ -120,13 +120,13 @@ export default function UploadPage() {
               <input
                 ref={fileInputRef}
                 type="file"
-                accept=".txt,.pdf"
+                accept=".txt,.pdf,.mp3,.wav,.m4a,.webm,audio/*,.png,.jpg,.jpeg,.webp,.gif,image/*"
                 data-testid="file-input"
                 onChange={(e) => setFile(e.target.files?.[0] ?? null)}
                 className="block w-full text-sm text-[var(--text-muted)] file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-neon-cyan/20 file:text-neon-cyan file:border file:border-neon-cyan/50 hover:file:bg-neon-cyan/30"
               />
               <p className="text-xs text-[var(--text-muted)]">
-                Accepts .txt and .pdf files. PDF text will be extracted automatically.
+                Accepts .txt, .pdf, audio (mp3, wav, m4a, webm), and images (png, jpg, webp). Text is extracted automatically.
               </p>
             </div>
           )}

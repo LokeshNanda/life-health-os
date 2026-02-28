@@ -9,7 +9,9 @@
 import { NextResponse } from "next/server";
 import OpenAI from "openai";
 import { getUserId } from "@/lib/auth";
-import { getEvents, getLatestSummary, getAiContext } from "@/lib/data";
+import { getEvents, getLatestSummary, getAiContext, setAiContext } from "@/lib/data";
+
+const AI_CONTEXT_MAX_SIZE = 16 * 1024; // 16KB rolling conversation buffer
 
 const SYSTEM_PROMPT = `You are a personal health memory assistant. You help users organize and query their health records.
 
@@ -93,6 +95,15 @@ export async function POST(request: Request) {
     });
 
     const text = completion.choices[0]?.message?.content ?? "";
+
+    // Append to conversation memory for multi-turn context
+    const exchange = `User: ${message}\nAssistant: ${text}\n\n`;
+    const newContext = (aiContext ?? "") + exchange;
+    const truncated = newContext.length > AI_CONTEXT_MAX_SIZE
+      ? newContext.slice(-AI_CONTEXT_MAX_SIZE)
+      : newContext;
+    await setAiContext(userId, truncated);
+
     return NextResponse.json({ text });
   } catch (err) {
     if (err instanceof Error && err.message.includes("Unauthorized")) {

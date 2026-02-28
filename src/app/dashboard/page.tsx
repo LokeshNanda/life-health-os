@@ -1,7 +1,10 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
-import { getMemoryStats } from "@/lib/api";
+import { getMemoryStats, getExportData } from "@/lib/api";
+import { Download } from "lucide-react";
+import { DashboardSkeleton } from "@/components/Skeleton";
 
 interface Stats {
   size: number;
@@ -20,6 +23,27 @@ export default function DashboardPage() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
+
+  async function handleExport() {
+    setExporting(true);
+    try {
+      const data = await getExportData();
+      const blob = new Blob([JSON.stringify(data, null, 2)], {
+        type: "application/json",
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `health-memory-export-${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Export failed");
+    } finally {
+      setExporting(false);
+    }
+  }
 
   useEffect(() => {
     getMemoryStats()
@@ -34,7 +58,7 @@ export default function DashboardPage() {
         <h1 className="text-2xl font-semibold text-[var(--text-primary)] mb-6">
           Memory Size Dashboard
         </h1>
-        <p className="text-[var(--text-muted)]">Loading...</p>
+        <DashboardSkeleton />
       </div>
     );
   }
@@ -85,6 +109,26 @@ export default function DashboardPage() {
             </p>
           )}
         </div>
+      </div>
+
+      <div className="mt-6 flex flex-wrap gap-3">
+        <button
+          type="button"
+          onClick={handleExport}
+          disabled={exporting || (stats?.entries ?? 0) === 0}
+          className="flex items-center gap-2 rounded-lg bg-neon-cyan/20 border border-neon-cyan/50 px-4 py-2 text-sm font-medium text-neon-cyan hover:bg-neon-cyan/30 hover:shadow-glow disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
+        >
+          <Download className="h-4 w-4" />
+          {exporting ? "Exporting..." : "Export Data (JSON)"}
+        </button>
+        {(stats?.entries ?? 0) === 0 && (
+          <Link
+            href="/upload"
+            className="flex items-center gap-2 rounded-lg border border-white/20 px-4 py-2 text-sm font-medium text-[var(--text-muted)] hover:bg-white/5 hover:text-[var(--text-primary)] transition-all"
+          >
+            Add your first memory
+          </Link>
+        )}
       </div>
     </div>
   );

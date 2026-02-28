@@ -7,6 +7,14 @@ interface Message {
   content: string;
 }
 
+const SUGGESTED_PROMPTS = [
+  "What medications am I taking?",
+  "Summarize my recent lab results",
+  "When was my last checkup?",
+  "What diagnoses are in my records?",
+  "List my medical events from the past year",
+];
+
 export default function ChatPage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
@@ -59,10 +67,23 @@ export default function ChatPage() {
       <div className="glass-panel glass-panel-glow rounded-xl flex-1 flex flex-col overflow-hidden">
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
           {messages.length === 0 && (
-            <p className="text-sm text-[var(--text-muted)] text-center py-8">
-              Ask a question about your health records. Example: &quot;What
-              medications am I taking?&quot;
-            </p>
+            <div className="py-8 space-y-4">
+              <p className="text-sm text-[var(--text-muted)] text-center">
+                Ask a question about your health records.
+              </p>
+              <div className="flex flex-wrap gap-2 justify-center">
+                {SUGGESTED_PROMPTS.map((prompt) => (
+                  <button
+                    key={prompt}
+                    type="button"
+                    onClick={() => setInput(prompt)}
+                    className="rounded-lg px-3 py-2 text-sm text-[var(--text-muted)] bg-white/5 border border-white/10 hover:bg-neon-cyan/10 hover:border-neon-cyan/30 hover:text-neon-cyan transition-all duration-200"
+                  >
+                    {prompt}
+                  </button>
+                ))}
+              </div>
+            </div>
           )}
           {messages.map((m, i) => (
             <div
