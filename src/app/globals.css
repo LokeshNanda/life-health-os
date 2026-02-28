@@ -1,0 +1,52 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Cinematic UI – LifeHealthOS Edition */
+:root {
+  --bg-dark: #0d1117;
+  --bg-charcoal: #161b22;
+  --bg-midnight: #0a0e14;
+  --surface-glass: rgba(22, 27, 34, 0.7);
+  --border-subtle: rgba(48, 54, 61, 0.6);
+  --text-primary: #e6edf3;
+  --text-muted: #8b949e;
+  --neon-cyan: #00d4ff;
+  --neon-cyan-dim: #00a8cc;
+  --glow-cyan: 0 0 20px rgba(0, 212, 255, 0.3);
+  --glow-cyan-soft: 0 0 40px rgba(0, 212, 255, 0.15);
+}
+
+body {
+  background: var(--bg-midnight);
+  color: var(--text-primary);
+  min-height: 100vh;
+}
+
+/* Glassmorphism panel base */
+@layer components {
+  .glass-panel {
+    @apply rounded-xl border backdrop-blur-xl;
+    background: var(--surface-glass);
+    border-color: var(--border-subtle);
+    box-shadow: var(--glow-cyan-soft);
+  }
+
+  .glass-panel-glow {
+    box-shadow: var(--glow-cyan-soft), 0 4px 24px rgba(0, 0, 0, 0.4);
+  }
+
+  .neon-accent {
+    color: var(--neon-cyan);
+  }
+
+  .neon-glow {
+    box-shadow: var(--glow-cyan);
+  }
+
+  /* Dark select options */
+  select option {
+    background: var(--bg-charcoal);
+    color: var(--text-primary);
+  }
+}
