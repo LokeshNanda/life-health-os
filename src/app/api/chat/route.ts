@@ -9,6 +9,7 @@
 import { NextResponse } from "next/server";
 import OpenAI from "openai";
 import { getUserId } from "@/lib/auth";
+import { isAllowedForOpenAI } from "@/lib/openai-access";
 import { getEvents, getLatestSummary, getAiContext, setAiContext } from "@/lib/data";
 
 const AI_CONTEXT_MAX_SIZE = 16 * 1024; // 16KB rolling conversation buffer
@@ -59,6 +60,13 @@ export async function POST(request: Request) {
       return NextResponse.json(
         { error: "Missing or invalid 'message' in body" },
         { status: 400 }
+      );
+    }
+
+    if (!isAllowedForOpenAI(userId)) {
+      return NextResponse.json(
+        { error: "AI features are not available for your account." },
+        { status: 403 }
       );
     }
 

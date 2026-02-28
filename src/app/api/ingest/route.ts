@@ -9,6 +9,7 @@ import { NextResponse } from "next/server";
 import pdfParse from "pdf-parse";
 import OpenAI from "openai";
 import { getUserId } from "@/lib/auth";
+import { isAllowedForOpenAI } from "@/lib/openai-access";
 import { addEvent } from "@/lib/data";
 import type { DataCategory, HealthEvent } from "@/lib/types";
 
@@ -132,9 +133,21 @@ export async function POST(request: Request) {
         } else if (isText) {
           content = await file.text();
         } else if (isAudioFile(file)) {
+          if (!isAllowedForOpenAI(userId)) {
+            return NextResponse.json(
+              { error: "Voice transcription is not available for your account." },
+              { status: 403 }
+            );
+          }
           content = await transcribeAudio(file);
           category = "voice_transcript";
         } else if (isImageFile(file)) {
+          if (!isAllowedForOpenAI(userId)) {
+            return NextResponse.json(
+              { error: "Image extraction is not available for your account." },
+              { status: 403 }
+            );
+          }
           content = await extractTextFromImage(file);
           category = "document";
         } else {

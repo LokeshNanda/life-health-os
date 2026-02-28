@@ -45,7 +45,7 @@ E2E tests use `E2E_BYPASS_AUTH=true` to skip sign-in. Ensure `NEXT_PUBLIC_DEV_US
 ## Deploy to Vercel
 
 1. Connect your repo to Vercel
-2. Add the same env vars in Project Settings → Environment Variables
+2. Add the same env vars in Project Settings → Environment Variables. To limit OpenAI cost, set `ALLOWED_OPENAI_USER_IDS` to a comma-separated list of Clerk user IDs; leave empty to allow no one.
 3. Deploy
 
 ## Architecture

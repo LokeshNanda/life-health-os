@@ -9,6 +9,7 @@
 import { NextResponse } from "next/server";
 import OpenAI from "openai";
 import { getUserId } from "@/lib/auth";
+import { isAllowedForOpenAI } from "@/lib/openai-access";
 import {
   getEvents,
   getLatestSummary,
@@ -35,6 +36,13 @@ export async function POST(request: Request) {
       return NextResponse.json(
         { error: "No events to summarize. Add memories first." },
         { status: 400 }
+      );
+    }
+
+    if (!isAllowedForOpenAI(userId)) {
+      return NextResponse.json(
+        { error: "AI features are not available for your account." },
+        { status: 403 }
       );
     }
 
