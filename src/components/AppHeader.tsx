@@ -7,11 +7,24 @@ import {
   SignedOut,
   UserButton,
 } from "@clerk/nextjs";
-import { LogIn, UserPlus } from "lucide-react";
+import { LogIn, UserPlus, Menu } from "lucide-react";
 
-export function AppHeader() {
+type AppHeaderProps = {
+  onMenuClick?: () => void;
+};
+
+export function AppHeader({ onMenuClick }: AppHeaderProps) {
   return (
-    <header className="sticky top-0 z-10 flex items-center justify-end gap-2 border-b border-white/10 bg-midnight-charcoal/80 px-4 py-3 backdrop-blur-xl">
+    <header className="sticky top-0 z-10 flex items-center justify-between gap-2 border-b border-white/10 bg-midnight-charcoal/80 px-4 py-3 backdrop-blur-xl">
+      <button
+        type="button"
+        onClick={onMenuClick}
+        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-[var(--text-muted)] hover:bg-white/5 hover:text-[var(--text-primary)] transition-all duration-200 touch-manipulation md:hidden"
+        aria-label="Open menu"
+      >
+        <Menu className="h-6 w-6" />
+      </button>
+      <div className="flex flex-1 justify-end gap-2 min-w-0">
       <SignedIn>
         <UserButton
           afterSignOutUrl="/"
@@ -38,6 +51,7 @@ export function AppHeader() {
           </SignUpButton>
         </div>
       </SignedOut>
+      </div>
     </header>
   );
 }

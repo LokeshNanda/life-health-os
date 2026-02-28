@@ -60,7 +60,7 @@ export default function HomePage() {
       </SignedIn>
       <SignedOut>
         <p className="mt-8 text-[var(--text-muted)]">
-          Sign in or sign up using the buttons in the sidebar to get started.
+          Sign in or sign up using the menu or buttons above to get started.
         </p>
       </SignedOut>
     </div>

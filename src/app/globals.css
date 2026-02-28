@@ -21,6 +21,15 @@ body {
   background: var(--bg-midnight);
   color: var(--text-primary);
   min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* Mobile: safe area and touch-friendly */
+@supports (padding: env(safe-area-inset-bottom)) {
+  body {
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+  }
 }
 
 /* Glassmorphism panel base */
