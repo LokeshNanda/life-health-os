@@ -2,21 +2,15 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import {
-  SignInButton,
-  SignUpButton,
-  SignedIn,
-  SignedOut,
-  UserButton,
-} from "@clerk/nextjs";
+import { useState, useEffect } from "react";
 import {
   PlusCircle,
   Clock,
   MessageSquare,
   BarChart3,
   FileText,
-  LogIn,
-  UserPlus,
+  PanelLeftClose,
+  PanelLeft,
 } from "lucide-react";
 
 const navItems = [
@@ -27,68 +21,79 @@ const navItems = [
   { href: "/summarize", label: "Summarize", icon: FileText },
 ];
 
+const STORAGE_KEY = "sidebar-collapsed";
+
 export function Nav() {
   const pathname = usePathname();
+  const [collapsed, setCollapsed] = useState(false);
+
+  useEffect(() => {
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (stored !== null) setCollapsed(stored === "true");
+  }, []);
+
+  const toggleCollapsed = () => {
+    const next = !collapsed;
+    setCollapsed(next);
+    localStorage.setItem(STORAGE_KEY, String(next));
+  };
 
   return (
-    <nav className="w-56 shrink-0 border-r border-white/10 bg-midnight-charcoal/80 backdrop-blur-xl">
+    <nav
+      className={`shrink-0 border-r border-white/10 bg-midnight-charcoal/80 backdrop-blur-xl transition-[width] duration-200 ease-in-out ${
+        collapsed ? "w-[4.5rem]" : "w-56"
+      }`}
+    >
       <div className="sticky top-0 flex flex-col gap-1 p-4 h-full">
-        <Link
-          href="/"
-          className="mb-4 px-3 py-2 text-lg font-semibold text-neon-cyan"
+        <div
+          className={`mb-4 flex items-center gap-2 ${
+            collapsed ? "justify-center" : "justify-between"
+          }`}
         >
-          Health Memory AI
-        </Link>
+          {!collapsed && (
+            <Link
+              href="/"
+              className="min-w-0 flex-1 px-3 py-2 text-lg font-semibold text-neon-cyan truncate"
+            >
+              Health Memory AI
+            </Link>
+          )}
+          <button
+            type="button"
+            onClick={toggleCollapsed}
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-[var(--text-muted)] hover:bg-white/5 hover:text-[var(--text-primary)] transition-all duration-200"
+            title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+          >
+            {collapsed ? (
+              <PanelLeft className="h-5 w-5" />
+            ) : (
+              <PanelLeftClose className="h-5 w-5" />
+            )}
+          </button>
+        </div>
         {navItems.map(({ href, label, icon: Icon }) => {
-          const isActive = pathname === href || (href !== "/" && pathname.startsWith(href));
+          const isActive =
+            pathname === href ||
+            (href !== "/" && pathname.startsWith(href));
           return (
             <Link
               key={href}
               href={href}
               className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200 ${
+                collapsed ? "justify-center" : ""
+              } ${
                 isActive
                   ? "bg-neon-cyan/15 text-neon-cyan shadow-glow-soft"
                   : "text-[var(--text-muted)] hover:bg-white/5 hover:text-[var(--text-primary)]"
               }`}
+              title={collapsed ? label : undefined}
             >
               <Icon className="h-5 w-5 shrink-0" />
-              {label}
+              {!collapsed && <span className="truncate">{label}</span>}
             </Link>
           );
         })}
-        <div className="mt-auto pt-4 border-t border-white/10">
-          <SignedIn>
-            <div className="flex items-center gap-3 px-3 py-2">
-              <UserButton
-                afterSignOutUrl="/"
-                appearance={{
-                  elements: {
-                    avatarBox: "h-8 w-8",
-                  },
-                }}
-              />
-              <span className="text-xs text-[var(--text-muted)] truncate flex-1">
-                Account
-              </span>
-            </div>
-          </SignedIn>
-          <SignedOut>
-            <div className="flex flex-col gap-1">
-              <SignInButton mode="modal">
-                <button className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-neon-cyan hover:bg-neon-cyan/10 transition-all duration-200">
-                  <LogIn className="h-5 w-5 shrink-0" />
-                  Sign in
-                </button>
-              </SignInButton>
-              <SignUpButton mode="modal">
-                <button className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-[var(--text-muted)] hover:bg-white/5 hover:text-[var(--text-primary)] transition-all duration-200">
-                  <UserPlus className="h-5 w-5 shrink-0" />
-                  Sign up
-                </button>
-              </SignUpButton>
-            </div>
-          </SignedOut>
-        </div>
       </div>
     </nav>
   );

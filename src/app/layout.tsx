@@ -3,6 +3,7 @@ import { Source_Sans_3 } from "next/font/google";
 import { ClerkProvider } from "@clerk/nextjs";
 import "./globals.css";
 import { Nav } from "@/components/Nav";
+import { AppHeader } from "@/components/AppHeader";
 
 const sourceSans = Source_Sans_3({
   subsets: ["latin"],
@@ -28,7 +29,10 @@ export default function RootLayout({
         <body className="min-h-screen font-sans antialiased bg-midnight text-[var(--text-primary)]">
           <div className="flex min-h-screen">
             <Nav />
-            <main className="flex-1 p-6 lg:p-8">{children}</main>
+            <div className="flex flex-1 flex-col min-w-0">
+              <AppHeader />
+              <main className="flex-1 p-6 lg:p-8">{children}</main>
+            </div>
           </div>
         </body>
       </html>
