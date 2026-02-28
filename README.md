@@ -42,11 +42,43 @@ npm run test:e2e
 
 E2E tests use `E2E_BYPASS_AUTH=true` to skip sign-in. Ensure `NEXT_PUBLIC_DEV_USER_ID` is set in `.env` so API calls use the dev user.
 
+## Docker
+
+Build and run the app in a container (env vars must be provided at runtime).
+
+**Using Docker Compose (recommended):**
+
+```bash
+# Ensure .env exists (copy from .env.example and fill in values)
+docker compose up --build
+# Detached: docker compose up -d --build
+```
+
+**Using plain Docker:**
+
+```bash
+# Build image
+docker build -t health-memory-ai .
+
+# Run (pass env via file or -e flags)
+docker run -p 3000:3000 --env-file .env health-memory-ai
+# Or with explicit vars:
+docker run -p 3000:3000 \
+  -e UPSTASH_REDIS_REST_URL="$UPSTASH_REDIS_REST_URL" \
+  -e UPSTASH_REDIS_REST_TOKEN="$UPSTASH_REDIS_REST_TOKEN" \
+  -e OPENAI_API_KEY="$OPENAI_API_KEY" \
+  -e NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY="$NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY" \
+  -e CLERK_SECRET_KEY="$CLERK_SECRET_KEY" \
+  health-memory-ai
+```
+
+The app uses `output: "standalone"` in `next.config.ts` for a minimal production image.
+
 ## Deploy to Vercel
 
-1. Connect your repo to Vercel
-2. Add the same env vars in Project Settings → Environment Variables. To limit OpenAI cost, set `ALLOWED_OPENAI_USER_IDS` to a comma-separated list of Clerk user IDs; leave empty to allow no one.
-3. Deploy
+1. Connect your repo to [Vercel](https://vercel.com); the project uses `vercel.json` and is detected as Next.js.
+2. Add the same env vars in **Project Settings → Environment Variables** (see `.env.example`). To limit OpenAI cost, set `ALLOWED_OPENAI_USER_IDS` to a comma-separated list of Clerk user IDs; leave empty to allow no one.
+3. Deploy (push to main or use the Vercel dashboard).
 
 ## Architecture
 

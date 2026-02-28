@@ -14,6 +14,9 @@ export const metadata: Metadata = {
   description: "Personal health knowledge base. Organize medical history, preserve context with AI summaries.",
 };
 
+// Avoid static prerender so Clerk env vars are only needed at runtime (e.g. in Docker).
+export const dynamic = "force-dynamic";
+
 export default function RootLayout({
   children,
 }: Readonly<{

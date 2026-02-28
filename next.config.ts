@@ -3,6 +3,7 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   serverExternalPackages: ["pdf-parse"],
+  output: "standalone",
 };
 
 export default nextConfig;
