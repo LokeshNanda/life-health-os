@@ -14,5 +14,5 @@ export default defineConfig({
     trace: "on-first-retry",
   },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
-  // Run `npm run dev` before tests. No webServer to avoid port conflicts.
+  // Run `npm run dev:e2e` before tests. Use webServer in CI if needed.
 });

@@ -28,7 +28,7 @@ RULES:
 
 export async function POST(request: Request) {
   try {
-    const userId = getUserId(request);
+    const userId = await getUserId(request);
 
     const events = await getEvents(userId);
     if (events.length === 0) {

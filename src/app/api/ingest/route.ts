@@ -6,6 +6,7 @@
  */
 
 import { NextResponse } from "next/server";
+import pdfParse from "pdf-parse";
 import { getUserId } from "@/lib/auth";
 import { addEvent } from "@/lib/data";
 import type { DataCategory, HealthEvent } from "@/lib/types";
@@ -23,9 +24,16 @@ function generateId(): string {
   return `evt_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
 }
 
+async function extractPdfText(file: File): Promise<string> {
+  const arrayBuffer = await file.arrayBuffer();
+  const buffer = Buffer.from(arrayBuffer);
+  const result = await pdfParse(buffer);
+  return result.text ?? "";
+}
+
 export async function POST(request: Request) {
   try {
-    const userId = getUserId(request);
+    const userId = await getUserId(request);
     const contentType = request.headers.get("content-type") ?? "";
 
     let content: string;
@@ -48,10 +56,27 @@ export async function POST(request: Request) {
       if (text) {
         content = text;
       } else if (file) {
-        content = await file.text();
-        if (file.type.startsWith("audio/")) category = "voice_transcript";
-        else if (file.type.includes("pdf") || file.type.includes("image"))
+        const isPdf =
+          file.type === "application/pdf" || file.name?.toLowerCase().endsWith(".pdf");
+        const isText =
+          file.type.startsWith("text/") || file.name?.toLowerCase().endsWith(".txt");
+
+        if (isPdf) {
+          content = await extractPdfText(file);
           category = "document";
+        } else if (isText) {
+          content = await file.text();
+        } else if (file.type.startsWith("audio/")) {
+          return NextResponse.json(
+            { error: "Audio files require speech-to-text. Not yet supported." },
+            { status: 400 }
+          );
+        } else {
+          return NextResponse.json(
+            { error: "Unsupported file type. Use .txt or .pdf" },
+            { status: 400 }
+          );
+        }
       } else {
         return NextResponse.json(
           { error: "Provide 'text' or 'file' in form data" },

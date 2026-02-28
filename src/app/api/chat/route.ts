@@ -41,8 +41,17 @@ function buildContext(events: { category: string; content: string; timestamp: st
 
 export async function POST(request: Request) {
   try {
-    const userId = getUserId(request);
-    const { message } = await request.json();
+    const userId = await getUserId(request);
+    let body: { message?: string };
+    try {
+      body = await request.json();
+    } catch {
+      return NextResponse.json(
+        { error: "Invalid JSON body" },
+        { status: 400 }
+      );
+    }
+    const { message } = body;
 
     if (!message || typeof message !== "string") {
       return NextResponse.json(

@@ -9,7 +9,7 @@ import { getEvents } from "@/lib/data";
 
 export async function GET(request: Request) {
   try {
-    const userId = getUserId(request);
+    const userId = await getUserId(request);
     const events = await getEvents(userId);
     return NextResponse.json(events);
   } catch (err) {

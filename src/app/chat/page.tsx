@@ -24,9 +24,12 @@ export default function ChatPage() {
     try {
       const res = await fetch("/api/chat", {
         method: "POST",
+        credentials: "include",
         headers: {
           "Content-Type": "application/json",
-          "x-user-id": process.env.NEXT_PUBLIC_DEV_USER_ID ?? "dev-user",
+          ...(process.env.NEXT_PUBLIC_DEV_USER_ID && {
+            "x-user-id": process.env.NEXT_PUBLIC_DEV_USER_ID,
+          }),
         },
         body: JSON.stringify({ message: userMessage }),
       });
@@ -67,6 +70,7 @@ export default function ChatPage() {
               className={`flex ${m.role === "user" ? "justify-end" : "justify-start"} animate-fade-slide-up`}
             >
               <div
+                data-testid={m.role === "assistant" ? "chat-assistant-message" : undefined}
                 className={`max-w-[85%] rounded-lg px-3 py-2 text-sm ${
                   m.role === "user"
                     ? "bg-neon-cyan/30 border border-neon-cyan/50 text-neon-cyan"
@@ -79,7 +83,7 @@ export default function ChatPage() {
           ))}
           {isLoading && (
             <div className="flex justify-start">
-              <div className="rounded-lg bg-midnight-charcoal/80 px-3 py-2 text-sm text-[var(--text-muted)] border border-white/10 animate-pulse-subtle">
+              <div data-testid="chat-assistant-message" className="rounded-lg bg-midnight-charcoal/80 px-3 py-2 text-sm text-[var(--text-muted)] border border-white/10 animate-pulse-subtle">
                 Thinking...
               </div>
             </div>

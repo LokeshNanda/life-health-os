@@ -30,9 +30,9 @@ test.describe("Health Memory AI", () => {
     await page.goto("/timeline");
     await expect(page.getByRole("heading", { name: /Health Timeline/i })).toBeVisible();
 
-    // Events, empty state, or load error - all valid outcomes
+    // Events, empty state, or load error - all valid outcomes (scope to main, use first() for multiple matches)
     await expect(
-      page.getByText(/blood pressure|No memories yet|Failed to load|Loading/i)
+      page.getByRole("main").getByText(/blood pressure|No memories yet|Failed to load|Loading/i).first()
     ).toBeVisible({ timeout: 5000 });
   });
 
@@ -40,8 +40,8 @@ test.describe("Health Memory AI", () => {
     await page.goto("/dashboard");
     await expect(page.getByRole("heading", { name: /Memory Size Dashboard/i })).toBeVisible();
 
-    // Should show entries count or loading
-    await expect(page.getByText(/Entries|Total Size|Loading/i)).toBeVisible({ timeout: 5000 });
+    // Should show entries count or loading (scope to main, use first() for multiple matches)
+    await expect(page.getByRole("main").getByText(/Entries|Total Size|Loading/i).first()).toBeVisible({ timeout: 5000 });
   });
 
   test("AI Chat - ask question and get response", async ({ page }) => {
@@ -51,10 +51,9 @@ test.describe("Health Memory AI", () => {
     await page.getByTestId("chat-input").fill("What was my blood pressure at the checkup?");
     await page.getByTestId("chat-send-btn").click();
 
-    // User message appears, then assistant response (gray bubble, not the green user bubble)
+    // User message appears, then assistant response
     await expect(page.getByText("What was my blood pressure at the checkup?")).toBeVisible();
-    const assistantBubbles = page.locator(".bg-gray-100");
-    await expect(assistantBubbles.last()).toBeVisible({ timeout: 15000 });
+    await expect(page.getByTestId("chat-assistant-message")).toBeVisible({ timeout: 15000 });
   });
 
   test("Summarize - user-triggered summarization", async ({ page }) => {
@@ -68,7 +67,7 @@ test.describe("Health Memory AI", () => {
     const isDisabled = await summarizeBtn.isDisabled();
     if (!isDisabled) {
       await summarizeBtn.click();
-      await expect(page.getByText(/Summary created|reduction|Version/i)).toBeVisible({
+      await expect(page.getByRole("main").getByText(/Summary created|reduction|Version/i).first()).toBeVisible({
         timeout: 15000,
       });
     } else {

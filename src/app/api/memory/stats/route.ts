@@ -10,7 +10,7 @@ import { getMemoryStats } from "@/lib/data";
 
 export async function GET(request: Request) {
   try {
-    const userId = getUserId(request);
+    const userId = await getUserId(request);
     const stats = await getMemoryStats(userId);
 
     return NextResponse.json(stats);

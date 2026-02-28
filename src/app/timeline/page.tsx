@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { getEvents } from "@/lib/api";
 import type { HealthEvent } from "@/lib/types";
 
 export default function TimelinePage() {
@@ -9,13 +10,7 @@ export default function TimelinePage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const userId = process.env.NODE_ENV === "development" 
-      ? (process.env.NEXT_PUBLIC_DEV_USER_ID ?? "dev-user") 
-      : "";
-    fetch("/api/timeline", {
-      headers: userId ? { "x-user-id": userId } : {},
-    })
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error("Failed to load"))))
+    getEvents()
       .then(setEvents)
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));

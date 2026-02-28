@@ -21,6 +21,7 @@ AI helps summarize, organize, and answer questions strictly from user-provided d
    Edit `.env.local` with:
    - `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` — from [Upstash](https://upstash.com)
    - `OPENAI_API_KEY` — from [OpenAI](https://platform.openai.com)
+   - `NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY` / `CLERK_SECRET_KEY` — from [Clerk Dashboard](https://dashboard.clerk.com/last-active?path=api-keys) (Clerk supports [keyless mode](https://clerk.com/docs/nextjs/getting-started/quickstart#keyless-mode-zero-config-setup) for instant development without keys)
    - `DEV_USER_ID` / `NEXT_PUBLIC_DEV_USER_ID` — for local dev (optional)
 
 3. **Run**
@@ -31,13 +32,15 @@ AI helps summarize, organize, and answer questions strictly from user-provided d
 ## E2E Tests
 
 ```bash
-# Terminal 1: start the app
-npm run dev
+# Terminal 1: start the app (use dev:e2e to bypass auth for tests)
+npm run dev:e2e
 
 # Terminal 2: run tests (use port 3001 if dev server switched)
 npm run test:e2e
 # Or: PLAYWRIGHT_BASE_URL=http://localhost:3001 npm run test:e2e
 ```
+
+E2E tests use `E2E_BYPASS_AUTH=true` to skip sign-in. Ensure `NEXT_PUBLIC_DEV_USER_ID` is set in `.env` so API calls use the dev user.
 
 ## Deploy to Vercel
 
