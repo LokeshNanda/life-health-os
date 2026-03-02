@@ -104,6 +104,7 @@ export async function POST(request: Request) {
 
     let content: string;
     let category: DataCategory = "note";
+    let timestampOverride: string | undefined;
 
     if (contentType.includes("application/json")) {
       const body = await request.json();
@@ -111,6 +112,7 @@ export async function POST(request: Request) {
       if (body.category && DATA_CATEGORIES.includes(body.category)) {
         category = body.category;
       }
+      timestampOverride = body.timestamp;
     } else if (contentType.includes("text/plain")) {
       content = await request.text();
     } else if (contentType.includes("multipart/form-data")) {
@@ -163,6 +165,8 @@ export async function POST(request: Request) {
         );
       }
       if (cat && DATA_CATEGORIES.includes(cat as DataCategory)) category = cat as DataCategory;
+      const ts = formData.get("timestamp");
+      if (ts && typeof ts === "string") timestampOverride = ts;
     } else {
       return NextResponse.json(
         { error: "Unsupported content type. Use JSON, text, or multipart/form-data." },
@@ -174,11 +178,22 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Empty content" }, { status: 400 });
     }
 
+    let eventTimestamp: string;
+    if (timestampOverride) {
+      const d = new Date(timestampOverride);
+      if (Number.isNaN(d.getTime())) {
+        return NextResponse.json({ error: "Invalid timestamp; use ISO 8601 date" }, { status: 400 });
+      }
+      eventTimestamp = d.toISOString();
+    } else {
+      eventTimestamp = new Date().toISOString();
+    }
+
     const event: HealthEvent = {
       id: generateId(),
       category,
       content: content.trim(),
-      timestamp: new Date().toISOString(),
+      timestamp: eventTimestamp,
     };
 
     const id = await addEvent(userId, event);

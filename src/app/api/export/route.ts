@@ -17,6 +17,8 @@ export async function GET(request: Request) {
 
     const payload = {
       exportedAt: new Date().toISOString(),
+      exportType: "full" as const,
+      description: "Full export of your health memory data (events and summary). Use for backup or data portability (e.g. GDPR).",
       events,
       summary: summary ? { content: summary.content, version: summary.version, createdAt: summary.createdAt } : null,
     };

@@ -20,6 +20,10 @@ export default function UploadPage() {
   const [text, setText] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [category, setCategory] = useState<(typeof CATEGORIES)[number]>("note");
+  const [entryDate, setEntryDate] = useState(() => {
+    const d = new Date();
+    return d.toISOString().slice(0, 10); // YYYY-MM-DD for date input
+  });
   const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
   const [message, setMessage] = useState("");
   const [isRecording, setIsRecording] = useState(false);
@@ -80,7 +84,8 @@ export default function UploadPage() {
           });
           setStatus("loading");
           try {
-            await ingestFile(audioFile, "voice_transcript");
+            const ts = entryDate ? `${entryDate}T12:00:00.000Z` : undefined;
+            await ingestFile(audioFile, "voice_transcript", ts);
             setStatus("success");
             setMessage("Voice note added successfully.");
           } catch (err) {
@@ -125,9 +130,11 @@ export default function UploadPage() {
     setMessage("");
     try {
       if (mode === "file" && file) {
-        await ingestFile(file, category);
+        const ts = entryDate ? `${entryDate}T12:00:00.000Z` : undefined;
+        await ingestFile(file, category, ts);
       } else {
-        await ingestText(text.trim(), category);
+        const ts = entryDate ? `${entryDate}T12:00:00.000Z` : undefined;
+        await ingestText(text.trim(), category, ts);
       }
       setStatus("success");
       setMessage("Memory added successfully.");
@@ -169,6 +176,22 @@ export default function UploadPage() {
               </option>
             ))}
           </select>
+          <label
+            htmlFor="entry-date"
+            className="block text-sm font-medium text-[var(--text-muted)] mt-3 mb-1"
+          >
+            Date of entry
+          </label>
+          <input
+            id="entry-date"
+            type="date"
+            value={entryDate}
+            onChange={(e) => setEntryDate(e.target.value)}
+            className="w-full rounded-lg border border-white/20 bg-midnight/50 px-3 py-2 text-sm text-[var(--text-primary)] focus:border-neon-cyan focus:outline-none focus:ring-1 focus:ring-neon-cyan"
+          />
+          <p className="text-xs text-[var(--text-muted)] mt-1">
+            When this happened (default: today). Used for timeline order.
+          </p>
         </div>
 
         <div className="glass-panel glass-panel-glow rounded-xl p-4">

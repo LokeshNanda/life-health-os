@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { Nav } from "@/components/Nav";
 import { AppHeader } from "@/components/AppHeader";
+import { QuickAdd } from "@/components/QuickAdd";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -28,6 +29,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         <AppHeader onMenuClick={() => setMobileMenuOpen(true)} />
         <main className="flex-1 p-4 sm:p-6 lg:p-8">{children}</main>
       </div>
+      <QuickAdd />
     </div>
   );
 }

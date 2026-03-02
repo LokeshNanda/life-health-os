@@ -20,19 +20,20 @@ function fetchOptions(init?: RequestInit): RequestInit {
   };
 }
 
-export async function ingestText(text: string, category?: string) {
+export async function ingestText(text: string, category?: string, timestamp?: string) {
   const res = await fetch("/api/ingest", fetchOptions({
     method: "POST",
-    body: JSON.stringify({ text, category }),
+    body: JSON.stringify({ text, category, ...(timestamp && { timestamp }) }),
   }));
   if (!res.ok) throw new Error((await res.json()).error ?? "Ingest failed");
   return res.json();
 }
 
-export async function ingestFile(file: File, category?: string) {
+export async function ingestFile(file: File, category?: string, timestamp?: string) {
   const formData = new FormData();
   formData.append("file", file);
   if (category) formData.append("category", category);
+  if (timestamp) formData.append("timestamp", timestamp);
 
   const res = await fetch("/api/ingest", {
     method: "POST",
@@ -56,9 +57,20 @@ export async function getMemoryStats() {
 }
 
 export async function getEvents() {
-  const res = await fetch("/api/timeline", fetchOptions());
+  const res = await fetch("/api/timeline?limit=500", fetchOptions());
   if (!res.ok) throw new Error("Failed to fetch events");
-  return res.json();
+  const data = await res.json();
+  return data.events ?? data;
+}
+
+export async function getEventsPage(opts?: { limit?: number; after?: string }) {
+  const params = new URLSearchParams();
+  if (opts?.limit != null) params.set("limit", String(opts.limit));
+  if (opts?.after) params.set("after", opts.after);
+  const q = params.toString();
+  const res = await fetch(`/api/timeline${q ? `?${q}` : ""}`, fetchOptions());
+  if (!res.ok) throw new Error("Failed to fetch timeline");
+  return res.json() as Promise<{ events: import("@/lib/types").HealthEvent[]; nextCursor: string | null }>;
 }
 
 export async function deleteMemory(eventId: string) {
@@ -91,5 +103,11 @@ export async function summarize() {
     const data = await res.json();
     throw new Error(data.error ?? "Summarize failed");
   }
+  return res.json();
+}
+
+export async function clearChatContext() {
+  const res = await fetch("/api/chat/context", fetchOptions({ method: "DELETE" }));
+  if (!res.ok) throw new Error("Failed to clear context");
   return res.json();
 }

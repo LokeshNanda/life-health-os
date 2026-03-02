@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState, useCallback, useMemo } from "react";
-import { getEvents, deleteMemory, getExportData } from "@/lib/api";
+import { getEventsPage, deleteMemory, getExportData } from "@/lib/api";
 import type { HealthEvent, DataCategory } from "@/lib/types";
 import { Trash2, Search, Download } from "lucide-react";
 import { TimelineSkeleton } from "@/components/Skeleton";
@@ -57,7 +57,9 @@ function filterEvents(
 
 export default function TimelinePage() {
   const [events, setEvents] = useState<HealthEvent[]>([]);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [categoryFilter, setCategoryFilter] = useState<DataCategory | "all">("all");
@@ -70,13 +72,24 @@ export default function TimelinePage() {
     [events, categoryFilter, searchQuery, dateRange]
   );
 
-  const loadEvents = useCallback(() => {
-    setLoading(true);
+  const loadEvents = useCallback((after?: string) => {
+    if (after) setLoadingMore(true);
+    else setLoading(true);
     setError(null);
-    getEvents()
-      .then(setEvents)
+    getEventsPage({ after })
+      .then((page) => {
+        if (after) {
+          setEvents((prev) => [...prev, ...page.events]);
+        } else {
+          setEvents(page.events);
+        }
+        setNextCursor(page.nextCursor);
+      })
       .catch((e) => setError(e.message))
-      .finally(() => setLoading(false));
+      .finally(() => {
+        setLoading(false);
+        setLoadingMore(false);
+      });
   }, []);
 
   useEffect(() => {
@@ -250,6 +263,18 @@ export default function TimelinePage() {
               </button>
             </div>
           ))}
+          {nextCursor && (
+            <div className="flex justify-center pt-4 pb-2">
+              <button
+                type="button"
+                onClick={() => loadEvents(nextCursor)}
+                disabled={loadingMore}
+                className="rounded-lg border border-white/20 px-4 py-2 text-sm font-medium text-[var(--text-muted)] hover:bg-white/5 hover:text-[var(--text-primary)] disabled:opacity-50 transition-all"
+              >
+                {loadingMore ? "Loading..." : "Load more"}
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>

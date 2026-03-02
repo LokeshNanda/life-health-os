@@ -1,17 +1,17 @@
 /**
  * GET /api/memory/stats
- * Output: size, entries, last summarized
+ * Output: size, entries, last summarized, byCategory breakdown
  * Per API_CONTRACT.md
  */
 
 import { NextResponse } from "next/server";
 import { getUserId } from "@/lib/auth";
-import { getMemoryStats } from "@/lib/data";
+import { getMemoryStatsWithBreakdown } from "@/lib/data";
 
 export async function GET(request: Request) {
   try {
     const userId = await getUserId(request);
-    const stats = await getMemoryStats(userId);
+    const stats = await getMemoryStatsWithBreakdown(userId);
 
     return NextResponse.json(stats);
   } catch (err) {

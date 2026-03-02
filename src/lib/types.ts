@@ -33,3 +33,9 @@ export interface MemoryStats {
   lastSummarized: string | null;
   summaryVersion: number | null;
 }
+
+export interface CategoryBreakdown {
+  category: DataCategory;
+  count: number;
+  size: number;
+}

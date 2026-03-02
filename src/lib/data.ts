@@ -5,7 +5,7 @@
 
 import { redis } from "./redis";
 import { keys } from "./schema";
-import type { HealthEvent, Summary, MemoryStats } from "./types";
+import type { HealthEvent, Summary, MemoryStats, DataCategory } from "./types";
 
 const AI_CONTEXT_MAX_SIZE = 16 * 1024; // 16KB bounded context
 
@@ -33,6 +33,38 @@ export async function getEvents(userId: string, count = 100): Promise<HealthEven
     })
     .filter((e) => !deletedSet.has(e.id));
   return events;
+}
+
+const TIMELINE_PAGE_SIZE = 30;
+
+export type EventsPage = { events: HealthEvent[]; nextCursor: string | null };
+
+export async function getEventsPage(
+  userId: string,
+  opts: { limit?: number; after?: string } = {}
+): Promise<EventsPage> {
+  const limit = opts.limit ?? TIMELINE_PAGE_SIZE;
+  const streamKey = keys.events(userId);
+  const deletedKey = keys.deleted(userId);
+  const start = opts.after ? `(${opts.after}` : "-";
+  const [results, deletedIds] = await Promise.all([
+    redis.xrange<{ data: string | HealthEvent }>(streamKey, start, "+", limit),
+    redis.smembers(deletedKey),
+  ]);
+  const deletedSet = new Set(deletedIds ?? []);
+  const entries = Object.entries(results).sort((a, b) => a[0].localeCompare(b[0]));
+  const events: HealthEvent[] = [];
+  for (const [sid, fields] of entries) {
+    const data = fields.data;
+    const event =
+      typeof data === "object" && data !== null
+        ? (data as HealthEvent)
+        : (JSON.parse(data as string) as HealthEvent);
+    if (!deletedSet.has(event.id)) events.push(event);
+  }
+  const nextCursor =
+    entries.length >= limit ? entries[entries.length - 1][0] : null;
+  return { events, nextCursor };
 }
 
 export async function deleteEvent(userId: string, eventId: string): Promise<void> {
@@ -77,5 +109,40 @@ export async function getMemoryStats(userId: string): Promise<MemoryStats> {
     entries: events.length,
     lastSummarized: lastSummary?.createdAt ?? null,
     summaryVersion: lastSummary?.version ?? null,
+  };
+}
+
+export interface MemoryStatsWithBreakdown extends MemoryStats {
+  byCategory: { category: DataCategory; count: number; size: number }[];
+}
+
+export async function getMemoryStatsWithBreakdown(
+  userId: string
+): Promise<MemoryStatsWithBreakdown> {
+  const [events, lastSummary] = await Promise.all([
+    getEvents(userId),
+    getLatestSummary(userId),
+  ]);
+  const size = JSON.stringify(events).length;
+  const byCategory = new Map<DataCategory, { count: number; size: number }>();
+  for (const e of events) {
+    const cat = e.category;
+    const existing = byCategory.get(cat) ?? { count: 0, size: 0 };
+    existing.count += 1;
+    existing.size += JSON.stringify(e).length;
+    byCategory.set(cat, existing);
+  }
+  const byCategoryList = Array.from(byCategory.entries()).map(([category, { count, size: s }]) => ({
+    category,
+    count,
+    size: s,
+  }));
+
+  return {
+    size,
+    entries: events.length,
+    lastSummarized: lastSummary?.createdAt ?? null,
+    summaryVersion: lastSummary?.version ?? null,
+    byCategory: byCategoryList,
   };
 }

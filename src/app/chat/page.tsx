@@ -1,10 +1,13 @@
 "use client";
 
 import { useState } from "react";
+import { clearChatContext } from "@/lib/api";
+import { RotateCcw } from "lucide-react";
 
 interface Message {
   role: "user" | "assistant";
   content: string;
+  followUps?: string[];
 }
 
 const SUGGESTED_PROMPTS = [
@@ -19,6 +22,7 @@ export default function ChatPage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [clearing, setClearing] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -43,7 +47,8 @@ export default function ChatPage() {
       });
       const data = await res.json();
       const text = data.text ?? (data.error ? `Error: ${data.error}` : "No response.");
-      setMessages((prev) => [...prev, { role: "assistant", content: text }]);
+      const followUps = Array.isArray(data.followUps) ? data.followUps : undefined;
+      setMessages((prev) => [...prev, { role: "assistant", content: text, followUps }]);
     } catch (err) {
       setMessages((prev) => [
         ...prev,
@@ -57,12 +62,35 @@ export default function ChatPage() {
     }
   }
 
+  async function handleClearContext() {
+    if (clearing || messages.length === 0) return;
+    setClearing(true);
+    try {
+      await clearChatContext();
+      setMessages([]);
+      setInput("");
+    } finally {
+      setClearing(false);
+    }
+  }
+
   return (
     <div className="mx-auto max-w-2xl flex flex-col h-[calc(100vh-4rem)] animate-fade-slide-up">
       <h1 className="text-2xl font-semibold text-[var(--text-primary)] mb-2">AI Chat</h1>
       <p className="text-[var(--text-muted)] mb-4">
         Ask questions about your health records. AI answers only from your data.
       </p>
+      {messages.length > 0 && (
+        <button
+          type="button"
+          onClick={handleClearContext}
+          disabled={clearing || isLoading}
+          className="mb-2 flex items-center gap-2 rounded-lg border border-white/20 px-3 py-1.5 text-sm text-[var(--text-muted)] hover:bg-white/5 hover:text-[var(--text-primary)] disabled:opacity-50 transition-all"
+        >
+          <RotateCcw className="h-4 w-4" />
+          {clearing ? "Clearing..." : "Clear conversation context"}
+        </button>
+      )}
 
       <div className="glass-panel glass-panel-glow rounded-xl flex-1 flex flex-col overflow-hidden">
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
@@ -88,7 +116,7 @@ export default function ChatPage() {
           {messages.map((m, i) => (
             <div
               key={i}
-              className={`flex ${m.role === "user" ? "justify-end" : "justify-start"} animate-fade-slide-up`}
+              className={`flex flex-col ${m.role === "user" ? "items-end" : "items-start"} animate-fade-slide-up`}
             >
               <div
                 data-testid={m.role === "assistant" ? "chat-assistant-message" : undefined}
@@ -100,6 +128,20 @@ export default function ChatPage() {
               >
                 {m.content}
               </div>
+              {m.role === "assistant" && m.followUps && m.followUps.length > 0 && (
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {m.followUps.map((q) => (
+                    <button
+                      key={q}
+                      type="button"
+                      onClick={() => setInput(q)}
+                      className="rounded-lg px-3 py-1.5 text-xs text-[var(--text-muted)] bg-white/5 border border-white/10 hover:bg-neon-cyan/10 hover:border-neon-cyan/30 hover:text-neon-cyan transition-all duration-200"
+                    >
+                      {q}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           ))}
           {isLoading && (

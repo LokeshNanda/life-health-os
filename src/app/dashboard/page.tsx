@@ -11,6 +11,7 @@ interface Stats {
   entries: number;
   lastSummarized: string | null;
   summaryVersion: number | null;
+  byCategory?: { category: string; count: number; size: number }[];
 }
 
 function formatBytes(bytes: number): string {
@@ -25,7 +26,7 @@ export default function DashboardPage() {
   const [error, setError] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
 
-  async function handleExport() {
+  async function handleExport(asFullData = false) {
     setExporting(true);
     try {
       const data = await getExportData();
@@ -35,7 +36,9 @@ export default function DashboardPage() {
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      a.download = `health-memory-export-${new Date().toISOString().slice(0, 10)}.json`;
+      a.download = asFullData
+        ? `health-memory-ai-full-data-export-${new Date().toISOString().slice(0, 10)}.json`
+        : `health-memory-export-${new Date().toISOString().slice(0, 10)}.json`;
       a.click();
       URL.revokeObjectURL(url);
     } catch (e) {
@@ -83,6 +86,10 @@ export default function DashboardPage() {
         Overview of your health memory storage and summarization status.
       </p>
 
+      <div className="mb-4 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-200/90">
+        <strong>Your data:</strong> You can download all your data at any time below. Export includes events and latest summary.
+      </div>
+
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="glass-panel glass-panel-glow rounded-xl p-4 animate-kpi-up">
           <p className="text-sm font-medium text-[var(--text-muted)]">Total Size</p>
@@ -109,17 +116,46 @@ export default function DashboardPage() {
             </p>
           )}
         </div>
+        {stats?.byCategory && stats.byCategory.length > 0 && (
+          <div className="glass-panel glass-panel-glow rounded-xl p-4 sm:col-span-2 animate-fade-slide-up [animation-delay:0.25s]">
+            <p className="text-sm font-medium text-[var(--text-muted)] mb-3">Storage by category</p>
+            <div className="space-y-2">
+              {stats.byCategory.map(({ category, count, size }) => (
+                <div
+                  key={category}
+                  className="flex items-center justify-between rounded-lg bg-midnight/50 border border-white/10 px-3 py-2 text-sm"
+                >
+                  <span className="font-medium text-[var(--text-primary)]">
+                    {category.replace(/_/g, " ")}
+                  </span>
+                  <span className="text-[var(--text-muted)]">
+                    {count} {count === 1 ? "entry" : "entries"} · {formatBytes(size)}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       <div className="mt-6 flex flex-wrap gap-3">
         <button
           type="button"
-          onClick={handleExport}
+          onClick={() => handleExport(false)}
           disabled={exporting || (stats?.entries ?? 0) === 0}
           className="flex items-center gap-2 rounded-lg bg-neon-cyan/20 border border-neon-cyan/50 px-4 py-2 text-sm font-medium text-neon-cyan hover:bg-neon-cyan/30 hover:shadow-glow disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
         >
           <Download className="h-4 w-4" />
           {exporting ? "Exporting..." : "Export Data (JSON)"}
+        </button>
+        <button
+          type="button"
+          onClick={() => handleExport(true)}
+          disabled={exporting || (stats?.entries ?? 0) === 0}
+          title="Download a complete copy of your health memory data (events + summary)"
+          className="flex items-center gap-2 rounded-lg border border-white/20 px-4 py-2 text-sm font-medium text-[var(--text-muted)] hover:bg-white/5 hover:text-[var(--text-primary)] disabled:opacity-50 transition-all"
+        >
+          Download all my data
         </button>
         {(stats?.entries ?? 0) === 0 && (
           <Link

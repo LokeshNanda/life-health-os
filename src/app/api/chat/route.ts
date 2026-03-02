@@ -21,7 +21,8 @@ CRITICAL RULES - YOU MUST FOLLOW:
 2. If the answer is not in the context, say "I don't have that information in your records."
 3. NEVER diagnose diseases, recommend treatments, or prescribe medication.
 4. NEVER infer medical conclusions. Only restate what is explicitly in the data.
-5. This app is for information organization only. It does NOT provide medical advice.`;
+5. This app is for information organization only. It does NOT provide medical advice.
+6. Optionally, after your reply add exactly one line: FOLLOWUPS: question1 | question2 (two short follow-up questions the user might ask next). If no follow-ups are helpful, do not add this line.`;
 
 function buildContext(events: { category: string; content: string; timestamp: string }[], summary: { content: string } | null, aiContext: string | null): string {
   const parts: string[] = [];
@@ -102,7 +103,18 @@ export async function POST(request: Request) {
       ],
     });
 
-    const text = completion.choices[0]?.message?.content ?? "";
+    const textRaw = completion.choices[0]?.message?.content ?? "";
+    const followUpMatch = textRaw.match(/\nFOLLOWUPS:\s*(.+)$/);
+    const text = followUpMatch
+      ? textRaw.slice(0, followUpMatch.index).trim()
+      : textRaw.trim();
+    const followUps: string[] = followUpMatch
+      ? followUpMatch[1]
+        .split("|")
+        .map((s) => s.trim())
+        .filter(Boolean)
+        .slice(0, 2)
+      : [];
 
     // Append to conversation memory for multi-turn context
     const exchange = `User: ${message}\nAssistant: ${text}\n\n`;
@@ -112,7 +124,7 @@ export async function POST(request: Request) {
       : newContext;
     await setAiContext(userId, truncated);
 
-    return NextResponse.json({ text });
+    return NextResponse.json({ text, followUps });
   } catch (err) {
     if (err instanceof Error && err.message.includes("Unauthorized")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

@@ -54,3 +54,4 @@ PRODUCT_VISION.md
 # clerk configuration (can include secrets)
 /.clerk/
 .cursor/
+docs/FEATURE_PLAN.md
