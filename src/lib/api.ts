@@ -64,10 +64,10 @@ export async function getEvents() {
   return data.events ?? data;
 }
 
-export async function getEventsPage(opts?: { limit?: number; after?: string }) {
+export async function getEventsPage(opts?: { limit?: number; before?: string }) {
   const params = new URLSearchParams();
   if (opts?.limit != null) params.set("limit", String(opts.limit));
-  if (opts?.after) params.set("after", opts.after);
+  if (opts?.before) params.set("before", opts.before);
   const q = params.toString();
   const res = await fetch(`/api/timeline${q ? `?${q}` : ""}`, fetchOptions());
   if (!res.ok) throw new Error("Failed to fetch timeline");
@@ -227,5 +227,37 @@ export async function deleteChatSession(sessionId: string): Promise<{ status: st
     method: "DELETE",
   }));
   if (!res.ok) throw new Error("Failed to delete session");
+  return res.json();
+}
+
+// --- Global search ---
+
+export type SearchSource = "timeline" | "summaries" | "chat";
+
+export interface GlobalSearchResult {
+  timeline: { events: import("@/lib/types").HealthEvent[] };
+  summaries: {
+    summary: { version: number; content: string; createdAt: string; sizeBefore: number; sizeAfter: number };
+    snippet: string;
+  } | null;
+  chat: {
+    sessions: {
+      id: string;
+      title: string;
+      createdAt: string;
+      matches: { role: "user" | "assistant"; contentSnippet: string }[];
+    }[];
+  };
+}
+
+export async function searchGlobal(
+  q: string,
+  sources?: SearchSource[]
+): Promise<GlobalSearchResult> {
+  const params = new URLSearchParams();
+  params.set("q", q);
+  if (sources?.length) params.set("sources", sources.join(","));
+  const res = await fetch(`/api/search?${params.toString()}`, fetchOptions());
+  if (!res.ok) throw new Error("Search failed");
   return res.json();
 }

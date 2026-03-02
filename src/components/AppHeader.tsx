@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import {
   SignInButton,
   SignUpButton,
@@ -7,7 +8,7 @@ import {
   SignedOut,
   UserButton,
 } from "@clerk/nextjs";
-import { LogIn, UserPlus, Menu } from "lucide-react";
+import { LogIn, UserPlus, Menu, Search } from "lucide-react";
 
 type AppHeaderProps = {
   onMenuClick?: () => void;
@@ -24,8 +25,16 @@ export function AppHeader({ onMenuClick }: AppHeaderProps) {
       >
         <Menu className="h-6 w-6" />
       </button>
-      <div className="flex flex-1 justify-end gap-2 min-w-0">
+      <div className="flex flex-1 justify-end gap-2 min-w-0 items-center">
       <SignedIn>
+        <Link
+          href="/search"
+          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-[var(--text-muted)] hover:bg-white/5 hover:text-[var(--text-primary)] transition-all duration-200 touch-manipulation"
+          aria-label="Search"
+          title="Search timeline, summaries, and chat"
+        >
+          <Search className="h-5 w-5" />
+        </Link>
         <UserButton
           afterSignOutUrl="/"
           appearance={{

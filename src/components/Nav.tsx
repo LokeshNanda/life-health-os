@@ -12,9 +12,11 @@ import {
   PanelLeftClose,
   PanelLeft,
   X,
+  Search,
 } from "lucide-react";
 
 const navItems = [
+  { href: "/search", label: "Search", icon: Search },
   { href: "/upload", label: "Add Memory", icon: PlusCircle },
   { href: "/timeline", label: "Health Timeline", icon: Clock },
   { href: "/chat", label: "AI Chat", icon: MessageSquare },

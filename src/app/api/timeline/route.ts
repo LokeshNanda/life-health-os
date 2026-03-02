@@ -1,7 +1,7 @@
 /**
  * GET /api/timeline
- * Returns user's health events for timeline view.
- * Query: limit (default 30), after (stream cursor for next page)
+ * Returns user's health events for timeline view (newest by event date first).
+ * Query: limit (default 30), before (ISO timestamp cursor for next page of older events)
  */
 
 import { NextResponse } from "next/server";
@@ -16,8 +16,8 @@ export async function GET(request: Request) {
       100,
       Math.max(1, parseInt(searchParams.get("limit") ?? "30", 10) || 30)
     );
-    const after = searchParams.get("after") ?? undefined;
-    const page = await getEventsPage(userId, { limit, after });
+    const before = searchParams.get("before") ?? undefined;
+    const page = await getEventsPage(userId, { limit, before });
     return NextResponse.json(page);
   } catch (err) {
     if (err instanceof Error && err.message.includes("Unauthorized")) {

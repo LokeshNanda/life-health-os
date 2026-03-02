@@ -5,6 +5,10 @@
 
 import { redis } from "./redis";
 import { keys } from "./schema";
+import {
+  listChatSessions,
+  getChatSessionMessages,
+} from "./chat-sessions";
 import type {
   HealthEvent,
   Summary,
@@ -139,37 +143,35 @@ export async function getEventById(
 }
 
 const TIMELINE_PAGE_SIZE = 30;
+/** Max events to fetch for timeline so we can sort by event date (timestamp), not upload order. */
+const TIMELINE_FETCH_SIZE = 2000;
 
 export type EventsPage = { events: HealthEvent[]; nextCursor: string | null };
 
+/**
+ * Returns timeline events ordered by event date (timestamp) newest first.
+ * Cursor is an ISO timestamp; "before" means return events with timestamp < before.
+ */
 export async function getEventsPage(
   userId: string,
-  opts: { limit?: number; after?: string } = {}
+  opts: { limit?: number; before?: string } = {}
 ): Promise<EventsPage> {
   const limit = opts.limit ?? TIMELINE_PAGE_SIZE;
-  const streamKey = keys.events(userId);
-  const deletedKey = keys.deleted(userId);
-  const start = opts.after ? `(${opts.after}` : "-";
-  const [results, deletedIds] = await Promise.all([
-    redis.xrange<{ data: string | HealthEvent }>(streamKey, start, "+", limit),
-    redis.smembers(deletedKey),
-  ]);
-  const deletedSet = new Set(deletedIds ?? []);
-  const entries = Object.entries(results).sort((a, b) => a[0].localeCompare(b[0]));
-  const events: HealthEvent[] = [];
-  for (const [sid, fields] of entries) {
-    const data = fields.data;
-    const event =
-      typeof data === "object" && data !== null
-        ? (data as HealthEvent)
-        : (JSON.parse(data as string) as HealthEvent);
-    if (!deletedSet.has(event.id)) events.push(event);
-  }
-  const editsMap = await getEditsMap(userId, events.map((e) => e.id));
-  const eventsWithEdits = applyEdits(events, editsMap);
+  const beforeTimestamp = opts.before ?? null;
+  // Fetch a large batch so we can sort by event date (when it happened), not stream order (when uploaded)
+  const eventsRaw = await getEvents(userId, TIMELINE_FETCH_SIZE);
+  const sorted = [...eventsRaw].sort(
+    (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+  );
+  const filtered = beforeTimestamp
+    ? sorted.filter((e) => e.timestamp < beforeTimestamp)
+    : sorted;
+  const page = filtered.slice(0, limit);
   const nextCursor =
-    entries.length >= limit ? entries[entries.length - 1][0] : null;
-  return { events: eventsWithEdits, nextCursor };
+    page.length >= limit && filtered.length > limit
+      ? page[page.length - 1].timestamp
+      : null;
+  return { events: page, nextCursor };
 }
 
 export async function deleteEvent(userId: string, eventId: string): Promise<void> {
@@ -258,4 +260,130 @@ export async function getMemoryStatsWithBreakdown(
     summaryVersion: lastSummary?.version ?? null,
     byCategory: byCategoryList,
   };
+}
+
+// --- Global search ---
+
+const SEARCH_EVENTS_LIMIT = 500;
+const SEARCH_RESULTS_MAX = 25;
+const SEARCH_CHAT_SESSIONS_MAX = 15;
+const SEARCH_SNIPPET_LEN = 100;
+
+function matchesQuery(text: string, q: string): boolean {
+  return text.toLowerCase().includes(q.toLowerCase());
+}
+
+function snippetAround(text: string, q: string, maxLen = SEARCH_SNIPPET_LEN): string {
+  const lower = text.toLowerCase();
+  const qLower = q.toLowerCase();
+  const idx = lower.indexOf(qLower);
+  if (idx < 0) return text.slice(0, maxLen) + (text.length > maxLen ? "…" : "");
+  const start = Math.max(0, idx - Math.floor(maxLen / 2));
+  const end = Math.min(text.length, start + maxLen);
+  const s = text.slice(start, end);
+  return (start > 0 ? "…" : "") + s + (end < text.length ? "…" : "");
+}
+
+export interface SearchEventsResult {
+  events: HealthEvent[];
+}
+
+export async function searchEvents(
+  userId: string,
+  q: string,
+  limit = SEARCH_RESULTS_MAX
+): Promise<SearchEventsResult> {
+  if (!q || q.trim().length < 2) return { events: [] };
+  const events = await getEvents(userId, SEARCH_EVENTS_LIMIT);
+  const qTrim = q.trim().toLowerCase();
+  const filtered = events.filter(
+    (e) =>
+      e.content.toLowerCase().includes(qTrim) ||
+      e.category.toLowerCase().includes(qTrim) ||
+      (e.tags?.some((t) => t.toLowerCase().includes(qTrim)) ?? false)
+  );
+  return { events: filtered.slice(0, limit) };
+}
+
+export interface SearchSummaryResult {
+  summary: Summary;
+  snippet: string;
+}
+
+export async function searchSummary(
+  userId: string,
+  q: string
+): Promise<SearchSummaryResult | null> {
+  if (!q || q.trim().length < 2) return null;
+  const summary = await getLatestSummary(userId);
+  if (!summary || !matchesQuery(summary.content, q)) return null;
+  return {
+    summary,
+    snippet: snippetAround(summary.content, q.trim(), 180),
+  };
+}
+
+export interface ChatSearchMatch {
+  role: "user" | "assistant";
+  contentSnippet: string;
+}
+
+export interface SearchChatResultItem {
+  id: string;
+  title: string;
+  createdAt: string;
+  matches: ChatSearchMatch[];
+}
+
+export interface SearchChatResult {
+  sessions: SearchChatResultItem[];
+}
+
+export async function searchChat(
+  userId: string,
+  q: string,
+  sessionLimit = SEARCH_CHAT_SESSIONS_MAX
+): Promise<SearchChatResult> {
+  if (!q || q.trim().length < 2) return { sessions: [] };
+  const qTrim = q.trim().toLowerCase();
+  const sessions = await listChatSessions(userId);
+  const byTitle = sessions.filter((s) =>
+    s.title.toLowerCase().includes(qTrim)
+  );
+  const rest = sessions.filter(
+    (s) => !s.title.toLowerCase().includes(qTrim)
+  ).slice(0, sessionLimit);
+  const out: SearchChatResultItem[] = [];
+
+  for (const s of byTitle) {
+    out.push({
+      id: s.id,
+      title: s.title,
+      createdAt: s.createdAt,
+      matches: [{ role: "user", contentSnippet: s.title }],
+    });
+  }
+
+  for (const s of rest) {
+    const messages = await getChatSessionMessages(userId, s.id);
+    const messageMatches: ChatSearchMatch[] = [];
+    for (const m of messages) {
+      if (matchesQuery(m.content, qTrim)) {
+        messageMatches.push({
+          role: m.role,
+          contentSnippet: snippetAround(m.content, qTrim),
+        });
+      }
+    }
+    if (messageMatches.length > 0) {
+      out.push({
+        id: s.id,
+        title: s.title,
+        createdAt: s.createdAt,
+        matches: messageMatches.slice(0, 5),
+      });
+    }
+  }
+
+  return { sessions: out.slice(0, SEARCH_RESULTS_MAX) };
 }

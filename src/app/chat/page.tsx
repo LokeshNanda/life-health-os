@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { useSearchParams } from "next/navigation";
 import { getChatSessions, getChatSession, deleteChatSession, getTags, type ChatSessionMeta } from "@/lib/api";
 import { MessageSquarePlus, Trash2, MessageCircle } from "lucide-react";
 
@@ -26,6 +27,8 @@ const SUGGESTED_PROMPTS = [
 ];
 
 export default function ChatPage() {
+  const searchParams = useSearchParams();
+  const sessionFromUrl = searchParams.get("session");
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -69,6 +72,13 @@ export default function ChatPage() {
       setMessages([]);
     }
   }, []);
+
+  useEffect(() => {
+    if (sessionFromUrl && !sessionsLoading && sessions.length > 0 && sessionId !== sessionFromUrl) {
+      const exists = sessions.some((s) => s.id === sessionFromUrl);
+      if (exists) loadSession(sessionFromUrl);
+    }
+  }, [sessionFromUrl, sessionsLoading, sessions, sessionId, loadSession]);
 
   function handleNewChat() {
     setSessionId(null);

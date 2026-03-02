@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { getEventsPage, deleteMemory, updateMemory, revertMemoryEdit, getMemory, getExportData, downloadExport } from "@/lib/api";
 import type { ExportFormat } from "@/lib/api";
@@ -80,6 +81,8 @@ function isContentLong(content: string): boolean {
 }
 
 export default function TimelinePage() {
+  const searchParams = useSearchParams();
+  const qFromUrl = searchParams.get("q") ?? "";
   const [events, setEvents] = useState<HealthEvent[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -87,7 +90,7 @@ export default function TimelinePage() {
   const [error, setError] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [categoryFilter, setCategoryFilter] = useState<DataCategory | "all">("all");
-  const [searchQuery, setSearchQuery] = useState("");
+  const [searchQuery, setSearchQuery] = useState(qFromUrl);
   const [dateRange, setDateRange] = useState<string>("all");
   const [tagFilter, setTagFilter] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
@@ -118,13 +121,13 @@ export default function TimelinePage() {
     [events, categoryFilter, searchQuery, dateRange, tagFilter]
   );
 
-  const loadEvents = useCallback((after?: string) => {
-    if (after) setLoadingMore(true);
+  const loadEvents = useCallback((before?: string) => {
+    if (before) setLoadingMore(true);
     else setLoading(true);
     setError(null);
-    getEventsPage({ after })
+    getEventsPage({ before })
       .then((page) => {
-        if (after) {
+        if (before) {
           setEvents((prev) => [...prev, ...page.events]);
         } else {
           setEvents(page.events);
@@ -141,6 +144,10 @@ export default function TimelinePage() {
   useEffect(() => {
     loadEvents();
   }, [loadEvents]);
+
+  useEffect(() => {
+    if (qFromUrl) setSearchQuery(qFromUrl);
+  }, [qFromUrl]);
 
   async function handleDelete(event: HealthEvent) {
     if (!confirm(`Delete this memory? "${event.content.slice(0, 50)}${event.content.length > 50 ? "..." : ""}"`)) {
