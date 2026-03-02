@@ -2,7 +2,7 @@
 
 import { useState, useRef, useCallback } from "react";
 import { ingestText, ingestFile } from "@/lib/api";
-import { Mic, Square } from "lucide-react";
+import { Mic, Square, Upload } from "lucide-react";
 
 const CATEGORIES = [
   "note",
@@ -13,12 +13,26 @@ const CATEGORIES = [
   "voice_transcript",
 ] as const;
 
+const FILE_ACCEPT = ".txt,.pdf,.mp3,.wav,.m4a,.webm,audio/*,.png,.jpg,.jpeg,.webp,.gif,image/*";
+
 type InputMode = "text" | "file" | "record";
+
+function isAcceptedFile(file: File): boolean {
+  const t = file.type.toLowerCase();
+  const name = file.name.toLowerCase();
+  if (t.startsWith("text/") || name.endsWith(".txt")) return true;
+  if (t === "application/pdf" || name.endsWith(".pdf")) return true;
+  if (t.startsWith("audio/") || [".mp3", ".wav", ".m4a", ".webm"].some((e) => name.endsWith(e))) return true;
+  if (t.startsWith("image/") || [".png", ".jpg", ".jpeg", ".webp", ".gif"].some((e) => name.endsWith(e))) return true;
+  return false;
+}
 
 export default function UploadPage() {
   const [mode, setMode] = useState<InputMode>("text");
   const [text, setText] = useState("");
   const [file, setFile] = useState<File | null>(null);
+  const [files, setFiles] = useState<File[]>([]);
+  const [batchResults, setBatchResults] = useState<{ name: string; ok: boolean; error?: string }[]>([]);
   const [category, setCategory] = useState<(typeof CATEGORIES)[number]>("note");
   const [tagsInput, setTagsInput] = useState("");
   const [entryDate, setEntryDate] = useState(() => {
@@ -29,13 +43,18 @@ export default function UploadPage() {
   const [message, setMessage] = useState("");
   const [isRecording, setIsRecording] = useState(false);
   const [recordSeconds, setRecordSeconds] = useState(0);
+  const [isDragOver, setIsDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const recordTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const canSubmit =
-    mode === "text" ? text.trim().length > 0 : mode === "file" ? file !== null : false;
+    mode === "text"
+      ? text.trim().length > 0
+      : mode === "file"
+        ? file !== null || files.length > 0
+        : false;
 
   const stopRecordTimer = useCallback(() => {
     if (recordTimerRef.current) {
@@ -122,28 +141,112 @@ export default function UploadPage() {
     if (isRecording) return;
     setMode(newMode);
     setMessage("");
+    setIsDragOver(false);
+  }
+
+  function handleFileDrop(e: React.DragEvent, forText: boolean) {
+    e.preventDefault();
+    setIsDragOver(false);
+    const list = e.dataTransfer?.files;
+    if (!list?.length) return;
+    if (forText) {
+      const f = list[0];
+      if (f.type.startsWith("text/") || f.name.toLowerCase().endsWith(".txt")) {
+        const reader = new FileReader();
+        reader.onload = () => {
+          setText(String(reader.result ?? ""));
+          setMessage("");
+        };
+        reader.readAsText(f);
+      } else {
+        setMode("file");
+        setFiles(Array.from(list).filter(isAcceptedFile));
+        setFile(list.length === 1 && isAcceptedFile(list[0]) ? list[0] : null);
+      }
+    } else {
+      const accepted = Array.from(list).filter(isAcceptedFile);
+      if (accepted.length === 1) {
+        setFile(accepted[0]);
+        setFiles([]);
+      } else if (accepted.length > 1) {
+        setFiles(accepted);
+        setFile(null);
+      } else if (list.length > 0 && isAcceptedFile(list[0])) {
+        setFile(list[0]);
+        setFiles([]);
+      }
+    }
+  }
+
+  function handleDragOver(e: React.DragEvent, forText: boolean) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (forText) setIsDragOver(e.dataTransfer?.types?.includes("Files") ?? false);
+    else setIsDragOver((e.dataTransfer?.types?.includes("Files") && e.dataTransfer?.items?.[0]?.kind === "file") ?? false);
+  }
+
+  function handleDragLeave(e: React.DragEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOver(false);
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if ((mode !== "text" && mode !== "file") || !canSubmit || status === "loading") return;
+    if ((mode !== "text" && mode !== "file") || status === "loading") return;
+
+    const ts = entryDate ? `${entryDate}T12:00:00.000Z` : undefined;
+    const tags = tagsInput.trim()
+      ? tagsInput.split(",").map((s) => s.trim().toLowerCase()).filter(Boolean)
+      : undefined;
+
+    if (mode === "file") {
+      const toUpload: File[] = files.length > 0 ? files : file ? [file] : [];
+      if (toUpload.length === 0) return;
+
+      setStatus("loading");
+      setMessage("");
+      setBatchResults([]);
+
+      const results: { name: string; ok: boolean; error?: string }[] = [];
+      for (let i = 0; i < toUpload.length; i++) {
+        const f = toUpload[i];
+        setMessage(`Uploading ${i + 1}/${toUpload.length}: ${f.name}`);
+        try {
+          await ingestFile(f, category, ts, tags);
+          results.push({ name: f.name, ok: true });
+        } catch (err) {
+          results.push({
+            name: f.name,
+            ok: false,
+            error: err instanceof Error ? err.message : "Failed",
+          });
+        }
+        setBatchResults([...results]);
+      }
+
+      const okCount = results.filter((r) => r.ok).length;
+      const failCount = results.length - okCount;
+      setStatus(failCount === 0 ? "success" : failCount === results.length ? "error" : "success");
+      setMessage(
+        failCount === 0
+          ? `${okCount} file(s) added successfully.`
+          : `${okCount} succeeded, ${failCount} failed.`
+      );
+      setFile(null);
+      setFiles([]);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      return;
+    }
+
+    if (mode === "text" && !text.trim()) return;
     setStatus("loading");
     setMessage("");
     try {
-      if (mode === "file" && file) {
-        const ts = entryDate ? `${entryDate}T12:00:00.000Z` : undefined;
-        const tags = tagsInput.trim() ? tagsInput.split(",").map((s) => s.trim().toLowerCase()).filter(Boolean) : undefined;
-        await ingestFile(file, category, ts, tags);
-      } else {
-        const ts = entryDate ? `${entryDate}T12:00:00.000Z` : undefined;
-        const tags = tagsInput.trim() ? tagsInput.split(",").map((s) => s.trim().toLowerCase()).filter(Boolean) : undefined;
-        await ingestText(text.trim(), category, ts, tags);
-      }
+      await ingestText(text.trim(), category, ts, tags);
       setStatus("success");
       setMessage("Memory added successfully.");
       setText("");
-      setFile(null);
-      if (fileInputRef.current) fileInputRef.current.value = "";
     } catch (err) {
       setStatus("error");
       setMessage(err instanceof Error ? err.message : "Failed to add memory");
@@ -254,15 +357,30 @@ export default function UploadPage() {
           </div>
 
           {mode === "text" ? (
-            <textarea
-              id="content"
-              data-testid="content-input"
-              value={text}
-              onChange={(e) => setText(e.target.value)}
-              rows={8}
-              placeholder="Paste or type your health-related note..."
-              className="w-full rounded-lg border border-white/20 bg-midnight/50 px-3 py-2 text-sm text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:border-neon-cyan focus:outline-none focus:ring-1 focus:ring-neon-cyan"
-            />
+            <div
+              className={`relative rounded-xl border-2 border-dashed transition-colors ${
+                isDragOver ? "border-neon-cyan/50 bg-neon-cyan/10" : "border-white/20 bg-midnight/50"
+              }`}
+              onDragOver={(e) => handleDragOver(e, true)}
+              onDragLeave={handleDragLeave}
+              onDrop={(e) => handleFileDrop(e, true)}
+            >
+              <textarea
+                id="content"
+                data-testid="content-input"
+                value={text}
+                onChange={(e) => setText(e.target.value)}
+                onDragOver={(e) => e.preventDefault()}
+                rows={8}
+                placeholder="Paste or type your health-related note... or drop a text file here"
+                className="w-full rounded-xl border-0 bg-transparent px-3 py-2 text-sm text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:outline-none focus:ring-0 resize-none"
+              />
+              {isDragOver && (
+                <div className="absolute inset-0 flex items-center justify-center rounded-xl bg-midnight/80 text-neon-cyan text-sm font-medium pointer-events-none">
+                  Drop text file or paste here
+                </div>
+              )}
+            </div>
           ) : mode === "record" ? (
             <div className="space-y-4 py-4">
               {typeof navigator !== "undefined" &&
@@ -314,16 +432,75 @@ export default function UploadPage() {
               )}
             </div>
           ) : (
-            <div className="space-y-2">
+            <div
+              className={`rounded-xl border-2 border-dashed p-6 transition-colors ${
+                isDragOver ? "border-neon-cyan/50 bg-neon-cyan/10" : "border-white/20 bg-midnight/50"
+              }`}
+              onDragOver={(e) => handleDragOver(e, false)}
+              onDragLeave={handleDragLeave}
+              onDrop={(e) => handleFileDrop(e, false)}
+            >
               <input
                 ref={fileInputRef}
                 type="file"
-                accept=".txt,.pdf,.mp3,.wav,.m4a,.webm,audio/*,.png,.jpg,.jpeg,.webp,.gif,image/*"
+                accept={FILE_ACCEPT}
+                multiple
                 data-testid="file-input"
-                onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-                className="block w-full text-sm text-[var(--text-muted)] file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-neon-cyan/20 file:text-neon-cyan file:border file:border-neon-cyan/50 hover:file:bg-neon-cyan/30"
+                onChange={(e) => {
+                  const list = e.target.files;
+                  if (!list?.length) return;
+                  if (list.length === 1) {
+                    setFile(list[0]);
+                    setFiles([]);
+                  } else {
+                    setFiles(Array.from(list).filter(isAcceptedFile));
+                    setFile(null);
+                  }
+                }}
+                className="hidden"
               />
-              <p className="text-xs text-[var(--text-muted)]">
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="flex w-full flex-col items-center justify-center gap-2 py-6 text-[var(--text-muted)] hover:text-neon-cyan focus:outline-none focus:ring-2 focus:ring-neon-cyan/50 rounded-lg"
+              >
+                <Upload className="h-10 w-10" />
+                <span className="text-sm font-medium">
+                  {files.length > 0
+                    ? `${files.length} file(s) selected`
+                    : file
+                      ? file.name
+                      : "Drop files here or click to browse (multiple allowed)"}
+                </span>
+                {(file || files.length === 1) && (
+                  <span className="text-xs">
+                    {file
+                      ? `${(file.size / 1024).toFixed(1)} KB`
+                      : files[0] && `${(files[0].size / 1024).toFixed(1)} KB`}
+                  </span>
+                )}
+              </button>
+              {batchResults.length > 0 && (
+                <ul className="mt-4 space-y-1.5 max-h-32 overflow-y-auto">
+                  {batchResults.map((r, i) => (
+                    <li
+                      key={i}
+                      className={`flex items-center justify-between text-xs rounded px-2 py-1 ${
+                        r.ok ? "text-neon-cyan bg-neon-cyan/10" : "text-red-400 bg-red-500/10"
+                      }`}
+                    >
+                      <span className="truncate">{r.name}</span>
+                      <span>{r.ok ? "OK" : r.error ?? "Failed"}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {isDragOver && (
+                <p className="text-center text-sm text-neon-cyan mt-2">
+                  Release to add this file
+                </p>
+              )}
+              <p className="text-xs text-[var(--text-muted)] mt-3 text-center">
                 Accepts .txt, .pdf, audio (mp3, wav, m4a, webm), and images (png, jpg, webp). Text is extracted automatically.
               </p>
             </div>

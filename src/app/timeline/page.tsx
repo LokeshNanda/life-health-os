@@ -3,10 +3,10 @@
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useState, useCallback, useMemo } from "react";
-import { getEventsPage, deleteMemory, updateMemory, revertMemoryEdit, getMemory, getExportData, downloadExport } from "@/lib/api";
+import { getEventsPage, deleteMemory, updateMemory, revertMemoryEdit, getMemory, getExportData, downloadExport, getPinnedIds, pinMemory, unpinMemory } from "@/lib/api";
 import type { ExportFormat } from "@/lib/api";
 import type { HealthEvent, DataCategory } from "@/lib/types";
-import { Trash2, Search, Download, Pencil, Undo2 } from "lucide-react";
+import { Trash2, Search, Download, Pencil, Undo2, Star } from "lucide-react";
 import { TimelineSkeleton } from "@/components/Skeleton";
 
 const CATEGORIES: (DataCategory | "all")[] = [
@@ -33,14 +33,19 @@ const DATE_RANGES = [
   { value: "30", label: "Last 30 days" },
   { value: "90", label: "Last 90 days" },
   { value: "365", label: "Last year" },
+  { value: "custom", label: "Custom range" },
 ] as const;
+
+type SortOrder = "newest" | "oldest";
 
 function filterEvents(
   events: HealthEvent[],
   category: DataCategory | "all",
   search: string,
   dateRange: string,
-  tagFilter: string | null
+  tagFilter: string | null,
+  dateFrom: string,
+  dateTo: string
 ): HealthEvent[] {
   let result = events;
 
@@ -58,7 +63,18 @@ function filterEvents(
     );
   }
 
-  if (dateRange !== "all") {
+  if (dateRange === "custom" && (dateFrom || dateTo)) {
+    if (dateFrom) {
+      const from = new Date(dateFrom);
+      from.setHours(0, 0, 0, 0);
+      result = result.filter((e) => new Date(e.timestamp) >= from);
+    }
+    if (dateTo) {
+      const to = new Date(dateTo);
+      to.setHours(23, 59, 59, 999);
+      result = result.filter((e) => new Date(e.timestamp) <= to);
+    }
+  } else if (dateRange !== "all" && dateRange !== "custom") {
     const days = parseInt(dateRange, 10);
     const cutoff = new Date();
     cutoff.setDate(cutoff.getDate() - days);
@@ -92,6 +108,9 @@ export default function TimelinePage() {
   const [categoryFilter, setCategoryFilter] = useState<DataCategory | "all">("all");
   const [searchQuery, setSearchQuery] = useState(qFromUrl);
   const [dateRange, setDateRange] = useState<string>("all");
+  const [dateFrom, setDateFrom] = useState<string>("");
+  const [dateTo, setDateTo] = useState<string>("");
+  const [sortOrder, setSortOrder] = useState<SortOrder>("newest");
   const [tagFilter, setTagFilter] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
   const [editingEvent, setEditingEvent] = useState<HealthEvent | null>(null);
@@ -100,6 +119,20 @@ export default function TimelinePage() {
   const [savingEdit, setSavingEdit] = useState(false);
   const [revertingId, setRevertingId] = useState<string | null>(null);
   const [expandedContentIds, setExpandedContentIds] = useState<Set<string>>(new Set());
+  const [pinnedIds, setPinnedIds] = useState<Set<string>>(new Set());
+
+  const loadPinned = useCallback(async () => {
+    try {
+      const ids = await getPinnedIds();
+      setPinnedIds(new Set(ids));
+    } catch {
+      setPinnedIds(new Set());
+    }
+  }, []);
+
+  useEffect(() => {
+    loadPinned();
+  }, [loadPinned]);
 
   const toggleContentExpanded = useCallback((eventId: string) => {
     setExpandedContentIds((prev) => {
@@ -116,10 +149,32 @@ export default function TimelinePage() {
     return Array.from(set).sort();
   }, [events]);
 
-  const filteredEvents = useMemo(
-    () => filterEvents(events, categoryFilter, searchQuery, dateRange, tagFilter),
-    [events, categoryFilter, searchQuery, dateRange, tagFilter]
-  );
+  const filteredEvents = useMemo(() => {
+    const filtered = filterEvents(
+      events,
+      categoryFilter,
+      searchQuery,
+      dateRange,
+      tagFilter,
+      dateFrom,
+      dateTo
+    );
+    if (sortOrder === "oldest") {
+      return [...filtered].sort(
+        (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+      );
+    }
+    return filtered;
+  }, [
+    events,
+    categoryFilter,
+    searchQuery,
+    dateRange,
+    tagFilter,
+    dateFrom,
+    dateTo,
+    sortOrder,
+  ]);
 
   const loadEvents = useCallback((before?: string) => {
     if (before) setLoadingMore(true);
@@ -148,6 +203,23 @@ export default function TimelinePage() {
   useEffect(() => {
     if (qFromUrl) setSearchQuery(qFromUrl);
   }, [qFromUrl]);
+
+  const highlightId = searchParams.get("highlight");
+  useEffect(() => {
+    if (!highlightId || filteredEvents.length === 0) return;
+    const el = document.getElementById(`event-${highlightId}`);
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  }, [highlightId, filteredEvents.length]);
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && editingEvent) closeEditModal();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [editingEvent]);
 
   async function handleDelete(event: HealthEvent) {
     if (!confirm(`Delete this memory? "${event.content.slice(0, 50)}${event.content.length > 50 ? "..." : ""}"`)) {
@@ -351,6 +423,37 @@ export default function TimelinePage() {
                 </option>
               ))}
             </select>
+            {dateRange === "custom" && (
+              <div className="flex flex-wrap items-center gap-2">
+                <input
+                  type="date"
+                  value={dateFrom}
+                  onChange={(e) => setDateFrom(e.target.value)}
+                  className="rounded-lg border border-white/20 bg-midnight/50 px-3 py-2 text-sm text-[var(--text-primary)] focus:border-neon-cyan focus:outline-none focus:ring-1 focus:ring-neon-cyan"
+                  aria-label="From date"
+                />
+                <span className="text-[var(--text-muted)] text-sm">to</span>
+                <input
+                  type="date"
+                  value={dateTo}
+                  onChange={(e) => setDateTo(e.target.value)}
+                  className="rounded-lg border border-white/20 bg-midnight/50 px-3 py-2 text-sm text-[var(--text-primary)] focus:border-neon-cyan focus:outline-none focus:ring-1 focus:ring-neon-cyan"
+                  aria-label="To date"
+                />
+              </div>
+            )}
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-[var(--text-muted)]">Sort:</span>
+              <select
+                value={sortOrder}
+                onChange={(e) => setSortOrder(e.target.value as SortOrder)}
+                className="rounded-lg border border-white/20 bg-midnight/50 px-3 py-2 text-sm text-[var(--text-primary)] focus:border-neon-cyan focus:outline-none focus:ring-1 focus:ring-neon-cyan"
+                aria-label="Sort order"
+              >
+                <option value="newest">Newest first</option>
+                <option value="oldest">Oldest first</option>
+              </select>
+            </div>
             {allTags.length > 0 && (
               <select
                 value={tagFilter ?? ""}
@@ -366,7 +469,7 @@ export default function TimelinePage() {
               </select>
             )}
           </div>
-          {(searchQuery || categoryFilter !== "all" || dateRange !== "all" || tagFilter) && (
+          {(searchQuery || categoryFilter !== "all" || dateRange !== "all" || tagFilter || sortOrder !== "newest") && (
             <p className="text-xs text-[var(--text-muted)]">
               Showing {filteredEvents.length} of {events.length} events
             </p>
@@ -377,7 +480,7 @@ export default function TimelinePage() {
       {events.length === 0 ? (
         <div className="glass-panel rounded-xl border-dashed border-white/20 p-8 text-center">
           <p className="text-[var(--text-muted)] mb-4">
-            No memories yet. Your health timeline will show events chronologically as you add them.
+            No memories yet. Add your first memory to build your health timeline.
           </p>
           <Link
             href="/upload"
@@ -394,8 +497,9 @@ export default function TimelinePage() {
         <div className="space-y-0">
           {filteredEvents.map((event, i) => (
             <div
+              id={`event-${event.id}`}
               key={event.id}
-              className="flex gap-4 border-b border-white/10 py-4 last:border-0 animate-fade-slide-up group"
+              className={`flex gap-4 border-b border-white/10 py-4 last:border-0 animate-fade-slide-up group ${highlightId === event.id ? "ring-2 ring-neon-cyan/50 rounded-lg" : ""}`}
               style={{ animationDelay: `${Math.min(i * 0.03, 0.3)}s` }}
             >
               <div className="shrink-0 w-32 text-sm text-[var(--text-muted)]">
@@ -422,6 +526,12 @@ export default function TimelinePage() {
                     Edited
                   </span>
                 )}
+                {pinnedIds.has(event.id) && (
+                  <span className="ml-2 inline-flex items-center gap-1 rounded bg-amber-500/20 px-2 py-0.5 text-xs text-amber-400">
+                    <Star className="h-3 w-3 fill-current" />
+                    Pinned
+                  </span>
+                )}
                 <div className="mt-1">
                   <p
                     className={`text-sm text-[var(--text-primary)] whitespace-pre-wrap ${!expandedContentIds.has(event.id) && isContentLong(event.content) ? "line-clamp-3" : ""}`}
@@ -440,6 +550,28 @@ export default function TimelinePage() {
                 </div>
               </div>
               <div className="shrink-0 flex items-center gap-0.5">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const isPinned = pinnedIds.has(event.id);
+                    try {
+                      if (isPinned) await unpinMemory(event.id);
+                      else await pinMemory(event.id);
+                      setPinnedIds((prev) => {
+                        const next = new Set(prev);
+                        if (isPinned) next.delete(event.id);
+                        else next.add(event.id);
+                        return next;
+                      });
+                    } catch {
+                      // ignore
+                    }
+                  }}
+                  className={`p-2 rounded-lg ${pinnedIds.has(event.id) ? "text-amber-400" : "text-[var(--text-muted)] hover:bg-amber-500/20 hover:text-amber-400"}`}
+                  title={pinnedIds.has(event.id) ? "Unpin" : "Pin"}
+                >
+                  <Star className={`h-4 w-4 ${pinnedIds.has(event.id) ? "fill-current" : ""}`} />
+                </button>
                 <button
                   type="button"
                   onClick={(e) => openEditModal(event, e)}

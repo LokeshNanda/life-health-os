@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { getMemoryStats, getExportData, downloadExport } from "@/lib/api";
+import { getMemoryStats, getExportData, downloadExport, downloadSummary, createShareLink, downloadProviderPdf } from "@/lib/api";
 import type { ExportFormat } from "@/lib/api";
 import { Download } from "lucide-react";
 import { DashboardSkeleton } from "@/components/Skeleton";
@@ -26,6 +26,9 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
+  const [downloadingSummary, setDownloadingSummary] = useState<"pdf" | "md" | null>(null);
+  const [shareLinkCopied, setShareLinkCopied] = useState(false);
+  const [shareLinkError, setShareLinkError] = useState<string | null>(null);
 
   async function handleExport(asFullData = false) {
     setExporting(true);
@@ -129,6 +132,46 @@ export default function DashboardPage() {
               Summary version: {stats.summaryVersion}
             </p>
           )}
+          {stats?.lastSummarized && (
+            <div className="flex flex-wrap gap-2 mt-2">
+              <button
+                type="button"
+                onClick={async () => {
+                  setDownloadingSummary("pdf");
+                  try {
+                    await downloadSummary("pdf");
+                  } catch (e) {
+                    setError(e instanceof Error ? e.message : "Download failed");
+                  } finally {
+                    setDownloadingSummary(null);
+                  }
+                }}
+                disabled={downloadingSummary !== null}
+                className="flex items-center gap-2 rounded-lg border border-neon-cyan/50 px-3 py-1.5 text-sm font-medium text-neon-cyan hover:bg-neon-cyan/20 disabled:opacity-50"
+              >
+                <Download className="h-4 w-4" />
+                {downloadingSummary === "pdf" ? "..." : "Summary (PDF)"}
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  setDownloadingSummary("md");
+                  try {
+                    await downloadSummary("md");
+                  } catch (e) {
+                    setError(e instanceof Error ? e.message : "Download failed");
+                  } finally {
+                    setDownloadingSummary(null);
+                  }
+                }}
+                disabled={downloadingSummary !== null}
+                className="flex items-center gap-2 rounded-lg border border-white/20 px-3 py-1.5 text-sm font-medium text-[var(--text-muted)] hover:bg-white/5 disabled:opacity-50"
+              >
+                <Download className="h-4 w-4" />
+                {downloadingSummary === "md" ? "..." : "Summary (MD)"}
+              </button>
+            </div>
+          )}
         </div>
         {stats?.byCategory && stats.byCategory.length > 0 && (
           <div className="glass-panel glass-panel-glow rounded-xl p-4 sm:col-span-2 animate-fade-slide-up [animation-delay:0.25s]">
@@ -151,6 +194,32 @@ export default function DashboardPage() {
           </div>
         )}
       </div>
+
+      {stats && stats.entries < 20 && (
+        <div className="mt-6 glass-panel rounded-xl p-4 border border-neon-cyan/20 animate-fade-slide-up [animation-delay:0.3s]">
+          <p className="text-sm font-medium text-[var(--text-primary)] mb-2">Tips to get more from your health memory</p>
+          <ul className="text-sm text-[var(--text-muted)] space-y-1 list-disc list-inside">
+            {stats.entries === 0 && (
+              <li>Add your first memory — paste a note, upload a lab result, or record a voice note.</li>
+            )}
+            {stats.entries > 0 && stats.entries < 5 && (
+              <li>Add a few more entries (e.g. lab results, medications, visit notes) to build context.</li>
+            )}
+            {stats.entries >= 5 && stats.entries < 20 && (
+              <li>Try summarizing after you have around 20 entries for a useful condensed view.</li>
+            )}
+            {stats.entries < 20 && (
+              <li>Use tags (e.g. &quot;cardiologist&quot;, &quot;2024 physical&quot;) to filter and find things later.</li>
+            )}
+          </ul>
+          <Link
+            href="/upload"
+            className="mt-3 inline-block text-sm font-medium text-neon-cyan hover:underline"
+          >
+            Add memory →
+          </Link>
+        </div>
+      )}
 
       <div className="mt-6 flex flex-wrap gap-3">
         <button
@@ -197,6 +266,44 @@ export default function DashboardPage() {
             Add your first memory
           </Link>
         )}
+        <div className="flex flex-wrap gap-2 border-l border-white/20 pl-3">
+          <span className="text-sm text-[var(--text-muted)] w-full sm:w-auto">Share with provider:</span>
+          <button
+            type="button"
+            onClick={async () => {
+              setShareLinkError(null);
+              try {
+                const { url } = await createShareLink();
+                await navigator.clipboard.writeText(url);
+                setShareLinkCopied(true);
+                setTimeout(() => setShareLinkCopied(false), 2000);
+              } catch (e) {
+                setShareLinkError(e instanceof Error ? e.message : "Failed to create link");
+              }
+            }}
+            disabled={(stats?.entries ?? 0) === 0}
+            className="rounded-lg border border-neon-cyan/50 px-3 py-1.5 text-sm font-medium text-neon-cyan hover:bg-neon-cyan/20 disabled:opacity-50"
+          >
+            {shareLinkCopied ? "Copied!" : "Copy read-only link"}
+          </button>
+          <button
+            type="button"
+            onClick={async () => {
+              try {
+                await downloadProviderPdf();
+              } catch (e) {
+                setError(e instanceof Error ? e.message : "Download failed");
+              }
+            }}
+            disabled={(stats?.entries ?? 0) === 0}
+            className="rounded-lg border border-white/20 px-3 py-1.5 text-sm font-medium text-[var(--text-muted)] hover:bg-white/5 disabled:opacity-50"
+          >
+            Download PDF for provider
+          </button>
+          {shareLinkError && (
+            <p className="text-xs text-red-400 w-full">{shareLinkError}</p>
+          )}
+        </div>
       </div>
     </div>
   );

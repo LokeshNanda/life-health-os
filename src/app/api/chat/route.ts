@@ -71,7 +71,7 @@ function parseCitedIds(text: string): { text: string; citedNumbers: number[] } {
 export async function POST(request: Request) {
   try {
     const userId = await getUserId(request);
-    let body: { message?: string; sessionId?: string | null; tags?: string[] };
+    let body: { message?: string; sessionId?: string | null; tags?: string[]; stream?: boolean };
     try {
       body = await request.json();
     } catch {
@@ -146,6 +146,104 @@ export async function POST(request: Request) {
     }
 
     const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+    const streamRequested = body.stream === true;
+
+    if (streamRequested) {
+      const completionStream = await openai.chat.completions.create({
+        model: "gpt-4o-mini",
+        messages: [
+          {
+            role: "system",
+            content: `${SYSTEM_PROMPT}\n\n---\n\n## User's Health Data (your only source of truth)\n\n${context}`,
+          },
+          { role: "user", content: message },
+        ],
+        stream: true,
+      });
+
+      let fullContent = "";
+      const encoder = new TextEncoder();
+
+      const stream = new ReadableStream({
+        async start(controller) {
+          try {
+            for await (const chunk of completionStream) {
+              const delta = chunk.choices[0]?.delta?.content ?? "";
+              if (delta) {
+                fullContent += delta;
+                controller.enqueue(
+                  encoder.encode(`data: ${JSON.stringify({ delta })}\n\n`)
+                );
+              }
+            }
+
+            const followUpMatch = fullContent.match(/\nFOLLOWUPS:\s*(.+)$/);
+            const textAfterFollowUps = followUpMatch
+              ? fullContent.slice(0, followUpMatch.index)
+              : fullContent;
+            const { text: textWithCited, citedNumbers } = parseCitedIds(textAfterFollowUps);
+            const text = textWithCited.trim();
+            const followUps: string[] = followUpMatch
+              ? followUpMatch[1]
+                  .split("|")
+                  .map((s) => s.trim())
+                  .filter(Boolean)
+                  .slice(0, 2)
+              : [];
+            const citations = citedNumbers
+              .filter((n) => n >= 1 && n <= events.length)
+              .filter((n, i, a) => a.indexOf(n) === i)
+              .map((n) => {
+                const e = events[n - 1];
+                return { id: e.id, category: e.category, date: e.timestamp.slice(0, 10) };
+              });
+
+            const now = new Date().toISOString();
+            await appendChatMessages(
+              userId,
+              sessionId,
+              [
+                { role: "user", content: message, createdAt: now },
+                {
+                  role: "assistant",
+                  content: text,
+                  followUps,
+                  citations,
+                  createdAt: now,
+                },
+              ],
+              {
+                title: sessionMessages.length === 0 ? sessionTitleFromMessage(message) : undefined,
+                updateTimestamp: true,
+              }
+            );
+
+            controller.enqueue(
+              encoder.encode(
+                `data: ${JSON.stringify({ done: true, citations, followUps, sessionId })}\n\n`
+              )
+            );
+          } catch (err) {
+            controller.enqueue(
+              encoder.encode(
+                `data: ${JSON.stringify({ error: err instanceof Error ? err.message : "Stream failed" })}\n\n`
+              )
+            );
+          } finally {
+            controller.close();
+          }
+        },
+      });
+
+      return new Response(stream, {
+        headers: {
+          "Content-Type": "text/event-stream",
+          "Cache-Control": "no-cache",
+          Connection: "keep-alive",
+        },
+      });
+    }
+
     const completion = await openai.chat.completions.create({
       model: "gpt-4o-mini",
       messages: [

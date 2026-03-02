@@ -206,9 +206,27 @@ export async function getLatestSummary(userId: string): Promise<Summary | null> 
   return summary;
 }
 
+/** List summary version numbers (newest first). Falls back to current version if list empty. */
+export async function getSummaryVersions(userId: string): Promise<number[]> {
+  const list = await redis.lrange(keys.summaryVersionList(userId), 0, -1);
+  const versions = list.map((s) => parseInt(s, 10)).filter((n) => Number.isInteger(n));
+  if (versions.length > 0) return versions;
+  const current = await redis.get<number>(keys.summaryVersions(userId));
+  return current != null ? [current] : [];
+}
+
+/** Get a specific summary by version. */
+export async function getSummaryByVersion(
+  userId: string,
+  version: number
+): Promise<Summary | null> {
+  return redis.get<Summary>(keys.summary(userId, version));
+}
+
 export async function saveSummary(userId: string, summary: Summary): Promise<void> {
   await redis.set(keys.summary(userId, summary.version), summary);
   await redis.set(keys.summaryVersions(userId), summary.version);
+  await redis.lpush(keys.summaryVersionList(userId), String(summary.version));
 }
 
 export async function getMemoryStats(userId: string): Promise<MemoryStats> {
@@ -416,4 +434,49 @@ export async function setProfile(
   };
   await redis.set(keys.profile(userId), JSON.stringify(profile));
   return profile;
+}
+
+const SHARE_TOKEN_TTL_SECONDS = 7 * 24 * 60 * 60; // 7 days
+
+export interface ShareTokenData {
+  userId: string;
+  expiresAt: string;
+}
+
+export async function createShareToken(userId: string): Promise<{ token: string; expiresAt: string }> {
+  const token = crypto.randomUUID();
+  const expiresAt = new Date(Date.now() + SHARE_TOKEN_TTL_SECONDS * 1000).toISOString();
+  await redis.set(
+    keys.shareToken(token),
+    JSON.stringify({ userId, expiresAt }),
+    { ex: SHARE_TOKEN_TTL_SECONDS }
+  );
+  return { token, expiresAt };
+}
+
+export async function getShareTokenData(token: string): Promise<ShareTokenData | null> {
+  const raw = await redis.get<string>(keys.shareToken(token));
+  if (!raw) return null;
+  try {
+    const data = JSON.parse(raw) as ShareTokenData;
+    if (data.userId && data.expiresAt && new Date(data.expiresAt) > new Date()) {
+      return data;
+    }
+  } catch {
+    // ignore
+  }
+  return null;
+}
+
+export async function getPinnedEventIds(userId: string): Promise<Set<string>> {
+  const members = await redis.smembers(keys.pinned(userId));
+  return new Set(members);
+}
+
+export async function addPinned(userId: string, eventId: string): Promise<void> {
+  await redis.sadd(keys.pinned(userId), eventId);
+}
+
+export async function removePinned(userId: string, eventId: string): Promise<void> {
+  await redis.srem(keys.pinned(userId), eventId);
 }

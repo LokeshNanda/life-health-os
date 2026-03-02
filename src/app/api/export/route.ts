@@ -6,11 +6,19 @@
 
 import { NextResponse } from "next/server";
 import { getUserId } from "@/lib/auth";
-import { getEvents, getLatestSummary } from "@/lib/data";
+import { getEvents, getLatestSummary, getProfile, getSummaryVersions, getSummaryByVersion } from "@/lib/data";
 import type { HealthEvent } from "@/lib/types";
 import { jsPDF } from "jspdf";
 
 const EXPORT_FILENAME_PREFIX = "health-memory-export";
+
+function getExportFilename(format: string, forProvider?: boolean): string {
+  const dateStr = new Date().toISOString().slice(0, 10);
+  if (forProvider && format === "pdf") {
+    return `health-memory-for-provider-${dateStr}.pdf`;
+  }
+  return `${EXPORT_FILENAME_PREFIX}-${dateStr}.${format === "csv" ? "csv" : format === "pdf" ? "pdf" : "json"}`;
+}
 
 function csvEscape(value: string): string {
   if (/[",\r\n]/.test(value)) {
@@ -120,7 +128,7 @@ export async function GET(request: Request) {
     const userId = await getUserId(request);
     const { searchParams } = new URL(request.url);
     const format = (searchParams.get("format") ?? "json").toLowerCase();
-    const dateStr = new Date().toISOString().slice(0, 10);
+    const forProvider = searchParams.get("for") === "provider";
 
     const [events, summary] = await Promise.all([
       getEvents(userId),
@@ -133,7 +141,7 @@ export async function GET(request: Request) {
 
     if (format === "csv") {
       const csv = buildCSV(events, summaryPayload);
-      const filename = `${EXPORT_FILENAME_PREFIX}-${dateStr}.csv`;
+      const filename = getExportFilename("csv", forProvider);
       return new NextResponse(csv, {
         status: 200,
         headers: {
@@ -145,7 +153,7 @@ export async function GET(request: Request) {
 
     if (format === "pdf") {
       const buffer = buildPDF(events, summaryPayload, new Date().toISOString());
-      const filename = `${EXPORT_FILENAME_PREFIX}-${dateStr}.pdf`;
+      const filename = getExportFilename("pdf", forProvider);
       return new NextResponse(buffer, {
         status: 200,
         headers: {
@@ -155,14 +163,27 @@ export async function GET(request: Request) {
       });
     }
 
-    // default: json
+    // default: json — full data portability (GDPR-style)
+    const profile = await getProfile(userId);
+    const versionNumbers = await getSummaryVersions(userId);
+    const summaries = await Promise.all(
+      versionNumbers.map((v) => getSummaryByVersion(userId, v))
+    ).then((arr) => arr.filter(Boolean));
     const payload = {
       exportedAt: new Date().toISOString(),
       exportType: "full" as const,
       description:
-        "Full export of your health memory data (events and summary). Use for backup or data portability (e.g. GDPR).",
+        "Full export of your health memory data (events, summaries, profile). Use for backup or data portability (e.g. GDPR Article 20).",
       events,
       summary: summaryPayload,
+      summaries: summaries.map((s) => ({
+        version: s!.version,
+        content: s!.content,
+        createdAt: s!.createdAt,
+        sizeBefore: s!.sizeBefore,
+        sizeAfter: s!.sizeAfter,
+      })),
+      profile: profile ?? undefined,
     };
     return NextResponse.json(payload);
   } catch (err) {

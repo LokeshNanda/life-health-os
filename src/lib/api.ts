@@ -125,6 +125,31 @@ export async function revertMemoryEdit(eventId: string): Promise<{ eventId: stri
   return res.json();
 }
 
+export async function getPinnedIds(): Promise<string[]> {
+  const res = await fetch("/api/memory/pinned", fetchOptions());
+  if (!res.ok) throw new Error("Failed to fetch pinned");
+  const data = await res.json();
+  return Array.isArray(data.pinned) ? data.pinned : [];
+}
+
+export async function pinMemory(eventId: string): Promise<{ pinned: boolean }> {
+  const res = await fetch(`/api/memory/${encodeURIComponent(eventId)}/pin`, fetchOptions({ method: "POST" }));
+  if (!res.ok) {
+    const data = await res.json();
+    throw new Error(data.error ?? "Failed to pin");
+  }
+  return res.json();
+}
+
+export async function unpinMemory(eventId: string): Promise<{ pinned: boolean }> {
+  const res = await fetch(`/api/memory/${encodeURIComponent(eventId)}/pin`, fetchOptions({ method: "DELETE" }));
+  if (!res.ok) {
+    const data = await res.json();
+    throw new Error(data.error ?? "Failed to unpin");
+  }
+  return res.json();
+}
+
 export async function getMemory(eventId: string): Promise<import("@/lib/types").HealthEvent> {
   const res = await fetch(`/api/memory/${encodeURIComponent(eventId)}`, fetchOptions());
   if (!res.ok) {
@@ -179,16 +204,109 @@ export async function downloadExport(format: ExportFormat): Promise<void> {
   URL.revokeObjectURL(url);
 }
 
-export async function summarize() {
+export async function summarize(category?: string) {
   const res = await fetch("/api/summarize", fetchOptions({
     method: "POST",
-    body: JSON.stringify({}),
+    body: JSON.stringify(category ? { category } : {}),
   }));
   if (!res.ok) {
     const data = await res.json();
     throw new Error(data.error ?? "Summarize failed");
   }
   return res.json();
+}
+
+/** Download the latest summary as PDF or Markdown. Fetches blob and triggers download. */
+export async function downloadSummary(format: "pdf" | "md", version?: number): Promise<void> {
+  const url = new URL("/api/summary/download", typeof window !== "undefined" ? window.location.origin : "");
+  url.searchParams.set("format", format);
+  if (version != null) url.searchParams.set("version", String(version));
+  const res = await fetch(url.toString(), {
+    credentials: "include",
+    headers: process.env.NEXT_PUBLIC_DEV_USER_ID ? { "x-user-id": process.env.NEXT_PUBLIC_DEV_USER_ID } : {},
+  });
+  if (!res.ok) {
+    if (res.status === 404) throw new Error("No summary found. Run summarization first.");
+    throw new Error("Failed to download summary");
+  }
+  const blob = await res.blob();
+  const filename =
+    res.headers.get("Content-Disposition")?.match(/filename="?([^";\n]+)"?/)?.[1] ||
+    `health-memory-summary-${version != null ? `v${version}-` : ""}${new Date().toISOString().slice(0, 10)}.${format === "md" ? "md" : "pdf"}`;
+  const urlObj = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = urlObj;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(urlObj);
+}
+
+export interface SummaryVersionItem {
+  version: number;
+  createdAt: string | null;
+}
+
+export async function getSummaryVersions(): Promise<SummaryVersionItem[]> {
+  const res = await fetch("/api/summary/versions", {
+    credentials: "include",
+    headers: process.env.NEXT_PUBLIC_DEV_USER_ID ? { "x-user-id": process.env.NEXT_PUBLIC_DEV_USER_ID } : {},
+  });
+  if (!res.ok) throw new Error("Failed to fetch summary versions");
+  const data = await res.json();
+  return Array.isArray(data.versions) ? data.versions : [];
+}
+
+export async function getSummaryByVersion(version: number): Promise<{
+  version: number;
+  content: string;
+  createdAt: string;
+  sizeBefore: number;
+  sizeAfter: number;
+}> {
+  const res = await fetch(`/api/summary/${version}`, {
+    credentials: "include",
+    headers: process.env.NEXT_PUBLIC_DEV_USER_ID ? { "x-user-id": process.env.NEXT_PUBLIC_DEV_USER_ID } : {},
+  });
+  if (!res.ok) {
+    if (res.status === 404) throw new Error("Summary version not found");
+    throw new Error("Failed to fetch summary");
+  }
+  return res.json();
+}
+
+export async function createShareLink(): Promise<{ url: string; expiresAt: string }> {
+  const res = await fetch("/api/share", {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json",
+      ...(process.env.NEXT_PUBLIC_DEV_USER_ID ? { "x-user-id": process.env.NEXT_PUBLIC_DEV_USER_ID } : {}),
+    },
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(data.error ?? "Failed to create share link");
+  }
+  return res.json();
+}
+
+/** Download export PDF with provider-friendly filename (for sharing with doctor). */
+export async function downloadProviderPdf(): Promise<void> {
+  const res = await fetch("/api/export?format=pdf&for=provider", {
+    credentials: "include",
+    headers: process.env.NEXT_PUBLIC_DEV_USER_ID ? { "x-user-id": process.env.NEXT_PUBLIC_DEV_USER_ID } : {},
+  });
+  if (!res.ok) throw new Error("Failed to export");
+  const blob = await res.blob();
+  const filename =
+    res.headers.get("Content-Disposition")?.match(/filename="?([^";\n]+)"?/)?.[1] ||
+    `health-memory-for-provider-${new Date().toISOString().slice(0, 10)}.pdf`;
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 export async function clearChatContext() {

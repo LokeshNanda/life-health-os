@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { SignedIn } from "@clerk/nextjs";
 import { ingestText } from "@/lib/api";
 import { Plus } from "lucide-react";
@@ -50,6 +50,20 @@ export function QuickAdd() {
     },
     [text, category, entryDate, tagsInput, status]
   );
+
+  useEffect(() => {
+    const onOpen = () => setOpen(true);
+    window.addEventListener("openQuickAdd" as keyof WindowEventMap, onOpen);
+    return () => window.removeEventListener("openQuickAdd" as keyof WindowEventMap, onOpen);
+  }, []);
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
 
   return (
     <SignedIn>

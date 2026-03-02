@@ -30,8 +30,18 @@ RULES:
 export async function POST(request: Request) {
   try {
     const userId = await getUserId(request);
+    let body: { category?: string } = {};
+    try {
+      body = await request.json();
+    } catch {
+      // empty body ok
+    }
+    const filterCategory = body.category && typeof body.category === "string" ? body.category : undefined;
 
-    const events = await getEvents(userId);
+    let events = await getEvents(userId);
+    if (filterCategory) {
+      events = events.filter((e) => e.category === filterCategory);
+    }
     if (events.length === 0) {
       return NextResponse.json(
         { error: "No events to summarize. Add memories first." },

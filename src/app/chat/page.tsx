@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { getChatSessions, getChatSession, deleteChatSession, getTags, type ChatSessionMeta } from "@/lib/api";
 import { MessageSquarePlus, Trash2, MessageCircle } from "lucide-react";
@@ -29,6 +30,7 @@ const SUGGESTED_PROMPTS = [
 export default function ChatPage() {
   const searchParams = useSearchParams();
   const sessionFromUrl = searchParams.get("session");
+  const qFromUrl = searchParams.get("q") ?? "";
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -37,6 +39,18 @@ export default function ChatPage() {
   const [sessionsLoading, setSessionsLoading] = useState(true);
   const [availableTags, setAvailableTags] = useState<string[]>([]);
   const [scopeTags, setScopeTags] = useState<string[]>([]);
+  const chatInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "/" && !["INPUT", "TEXTAREA"].includes((e.target as HTMLElement)?.tagName)) {
+        e.preventDefault();
+        chatInputRef.current?.focus();
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
 
   const fetchSessions = useCallback(async () => {
     setSessionsLoading(true);
@@ -74,6 +88,10 @@ export default function ChatPage() {
   }, []);
 
   useEffect(() => {
+    if (qFromUrl) setInput(qFromUrl);
+  }, [qFromUrl]);
+
+  useEffect(() => {
     if (sessionFromUrl && !sessionsLoading && sessions.length > 0 && sessionId !== sessionFromUrl) {
       const exists = sessions.some((s) => s.id === sessionFromUrl);
       if (exists) loadSession(sessionFromUrl);
@@ -108,17 +126,94 @@ export default function ChatPage() {
         body: JSON.stringify({
           message: userMessage,
           sessionId: sessionId ?? undefined,
+          stream: true,
           ...(scopeTags.length > 0 && { tags: scopeTags }),
         }),
       });
-      const data = await res.json();
-      const text = data.text ?? (data.error ? `Error: ${data.error}` : "No response.");
-      const followUps = Array.isArray(data.followUps) ? data.followUps : undefined;
-      const citations = Array.isArray(data.citations) ? data.citations : undefined;
-      setMessages((prev) => [...prev, { role: "assistant", content: text, followUps, citations }]);
-      if (data.sessionId) {
-        setSessionId(data.sessionId);
-        fetchSessions();
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error ?? "Request failed");
+      }
+
+      const contentType = res.headers.get("Content-Type") ?? "";
+      if (contentType.includes("text/event-stream")) {
+        const reader = res.body?.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+        let streamedContent = "";
+        setMessages((prev) => [
+          ...prev,
+          { role: "assistant", content: "" },
+        ]);
+
+        if (reader) {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split("\n");
+            buffer = lines.pop() ?? "";
+            for (const line of lines) {
+              if (line.startsWith("data: ")) {
+                const raw = line.slice(6);
+                if (raw === "[DONE]") continue;
+                try {
+                  const data = JSON.parse(raw);
+                  if (data.delta != null) {
+                    streamedContent += data.delta;
+                    setMessages((prev) => {
+                      const next = [...prev];
+                      const last = next[next.length - 1];
+                      if (last?.role === "assistant") {
+                        next[next.length - 1] = { ...last, content: streamedContent };
+                      }
+                      return next;
+                    });
+                  } else if (data.done === true) {
+                    const followUps = Array.isArray(data.followUps) ? data.followUps : undefined;
+                    const citations = Array.isArray(data.citations) ? data.citations : undefined;
+                    setMessages((prev) => {
+                      const next = [...prev];
+                      const last = next[next.length - 1];
+                      if (last?.role === "assistant") {
+                        next[next.length - 1] = { ...last, followUps, citations };
+                      }
+                      return next;
+                    });
+                    if (data.sessionId) {
+                      setSessionId(data.sessionId);
+                      fetchSessions();
+                    }
+                  } else if (data.error) {
+                    setMessages((prev) => {
+                      const next = [...prev];
+                      const last = next[next.length - 1];
+                      if (last?.role === "assistant") {
+                        next[next.length - 1] = { ...last, content: `Error: ${data.error}` };
+                      } else {
+                        next.push({ role: "assistant", content: `Error: ${data.error}` });
+                      }
+                      return next;
+                    });
+                  }
+                } catch {
+                  // skip invalid JSON
+                }
+              }
+            }
+          }
+        }
+      } else {
+        const data = await res.json();
+        const text = data.text ?? (data.error ? `Error: ${data.error}` : "No response.");
+        const followUps = Array.isArray(data.followUps) ? data.followUps : undefined;
+        const citations = Array.isArray(data.citations) ? data.citations : undefined;
+        setMessages((prev) => [...prev, { role: "assistant", content: text, followUps, citations }]);
+        if (data.sessionId) {
+          setSessionId(data.sessionId);
+          fetchSessions();
+        }
       }
     } catch (err) {
       setMessages((prev) => [
@@ -238,7 +333,7 @@ export default function ChatPage() {
           {messages.length === 0 && (
             <div className="py-8 space-y-4">
               <p className="text-sm text-[var(--text-muted)] text-center">
-                Ask a question about your health records.
+                Ask something about your health records. Answers are based only on your data.
               </p>
               <div className="flex flex-wrap gap-2 justify-center">
                 {SUGGESTED_PROMPTS.map((prompt) => (
@@ -273,13 +368,14 @@ export default function ChatPage() {
                 <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[var(--text-muted)]">
                   <span className="font-medium text-[var(--text-primary)]">Sources:</span>
                   {m.citations.map((c) => (
-                    <span
+                    <Link
                       key={c.id}
-                      className="rounded bg-white/5 px-2 py-0.5 border border-white/10"
-                      title={`Event: ${c.id}`}
+                      href={`/timeline?highlight=${encodeURIComponent(c.id)}`}
+                      className="rounded bg-white/5 px-2 py-0.5 border border-white/10 hover:bg-neon-cyan/20 hover:border-neon-cyan/40 hover:text-neon-cyan transition-colors"
+                      title={`View event: ${c.category}, ${c.date}`}
                     >
                       {c.category.replace(/_/g, " ")}, {c.date}
-                    </span>
+                    </Link>
                   ))}
                 </div>
               )}
@@ -310,6 +406,7 @@ export default function ChatPage() {
 
         <form onSubmit={handleSubmit} className="p-4 border-t border-white/10 flex gap-2 shrink-0">
           <input
+            ref={chatInputRef}
             value={input}
             onChange={(e) => setInput(e.target.value)}
             data-testid="chat-input"
