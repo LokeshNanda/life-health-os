@@ -4,10 +4,17 @@ import { useState } from "react";
 import { clearChatContext } from "@/lib/api";
 import { RotateCcw } from "lucide-react";
 
+interface Citation {
+  id: string;
+  category: string;
+  date: string;
+}
+
 interface Message {
   role: "user" | "assistant";
   content: string;
   followUps?: string[];
+  citations?: Citation[];
 }
 
 const SUGGESTED_PROMPTS = [
@@ -48,7 +55,8 @@ export default function ChatPage() {
       const data = await res.json();
       const text = data.text ?? (data.error ? `Error: ${data.error}` : "No response.");
       const followUps = Array.isArray(data.followUps) ? data.followUps : undefined;
-      setMessages((prev) => [...prev, { role: "assistant", content: text, followUps }]);
+      const citations = Array.isArray(data.citations) ? data.citations : undefined;
+      setMessages((prev) => [...prev, { role: "assistant", content: text, followUps, citations }]);
     } catch (err) {
       setMessages((prev) => [
         ...prev,
@@ -128,6 +136,20 @@ export default function ChatPage() {
               >
                 {m.content}
               </div>
+              {m.role === "assistant" && m.citations && m.citations.length > 0 && (
+                <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[var(--text-muted)]">
+                  <span className="font-medium text-[var(--text-primary)]">Sources:</span>
+                  {m.citations.map((c) => (
+                    <span
+                      key={c.id}
+                      className="rounded bg-white/5 px-2 py-0.5 border border-white/10"
+                      title={`Event: ${c.id}`}
+                    >
+                      {c.category.replace(/_/g, " ")}, {c.date}
+                    </span>
+                  ))}
+                </div>
+              )}
               {m.role === "assistant" && m.followUps && m.followUps.length > 0 && (
                 <div className="mt-2 flex flex-wrap gap-2">
                   {m.followUps.map((q) => (

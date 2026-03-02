@@ -22,9 +22,14 @@ CRITICAL RULES - YOU MUST FOLLOW:
 3. NEVER diagnose diseases, recommend treatments, or prescribe medication.
 4. NEVER infer medical conclusions. Only restate what is explicitly in the data.
 5. This app is for information organization only. It does NOT provide medical advice.
-6. Optionally, after your reply add exactly one line: FOLLOWUPS: question1 | question2 (two short follow-up questions the user might ask next). If no follow-ups are helpful, do not add this line.`;
+6. When your answer uses information from specific health events (the numbered list under "Raw Health Events"), cite them. At the end of your reply, on a single line, list the event numbers you used: CITED: 1 2 3 (space-separated). Only include numbers of events you actually used. If you used no specific event (e.g. only the summary), do not add a CITED line.
+7. Optionally, after your reply add exactly one line: FOLLOWUPS: question1 | question2 (two short follow-up questions the user might ask next). If no follow-ups are helpful, do not add this line. Put CITED before FOLLOWUPS if both are present.`;
 
-function buildContext(events: { category: string; content: string; timestamp: string }[], summary: { content: string } | null, aiContext: string | null): string {
+function buildContext(
+  events: { id: string; category: string; content: string; timestamp: string }[],
+  summary: { content: string } | null,
+  aiContext: string | null
+): string {
   const parts: string[] = [];
 
   if (summary) {
@@ -35,12 +40,25 @@ function buildContext(events: { category: string; content: string; timestamp: st
     parts.push("## AI Working Memory\n" + aiContext);
   }
 
-  parts.push("## Raw Health Events (chronological)\n");
-  for (const e of events) {
-    parts.push(`[${e.timestamp}] ${e.category}: ${e.content}`);
-  }
+  parts.push("## Raw Health Events (chronological)\nEach event has a number in parentheses; cite these numbers when you use that event.\n");
+  events.forEach((e, i) => {
+    parts.push(`(${i + 1}) [${e.timestamp}] ${e.category}: ${e.content}`);
+  });
 
   return parts.join("\n\n");
+}
+
+/** Parse CITED: 1 2 3 (or 1, 2, 3) from text; return trimmed main text and array of 1-based event indices. */
+function parseCitedIds(text: string): { text: string; citedNumbers: number[] } {
+  const citedMatch = text.match(/\nCITED:\s*([\d\s,]+)(?:\n|$)/i);
+  if (!citedMatch) return { text: text.trim(), citedNumbers: [] };
+  const citedNumbers = citedMatch[1]
+    .trim()
+    .split(/[\s,]+/)
+    .map((s) => parseInt(s, 10))
+    .filter((n) => Number.isInteger(n) && n >= 1);
+  const beforeCited = text.slice(0, citedMatch.index).trim();
+  return { text: beforeCited, citedNumbers };
 }
 
 export async function POST(request: Request) {
@@ -82,12 +100,16 @@ export async function POST(request: Request) {
     if (!context.trim() || (events.length === 0 && !summary && !aiContext)) {
       return NextResponse.json({
         text: "I don't have any health records for you yet. Add memories (documents, notes, lab results) to get started.",
+        followUps: [],
+        citations: [],
       });
     }
 
     if (!process.env.OPENAI_API_KEY) {
       return NextResponse.json({
         text: "AI is not configured. Set OPENAI_API_KEY to enable chat.",
+        followUps: [],
+        citations: [],
       });
     }
 
@@ -105,16 +127,30 @@ export async function POST(request: Request) {
 
     const textRaw = completion.choices[0]?.message?.content ?? "";
     const followUpMatch = textRaw.match(/\nFOLLOWUPS:\s*(.+)$/);
-    const text = followUpMatch
-      ? textRaw.slice(0, followUpMatch.index).trim()
-      : textRaw.trim();
+    const textAfterFollowUps = followUpMatch
+      ? textRaw.slice(0, followUpMatch.index)
+      : textRaw;
+    const { text: textWithCited, citedNumbers } = parseCitedIds(textAfterFollowUps);
+    const text = textWithCited.trim();
     const followUps: string[] = followUpMatch
       ? followUpMatch[1]
-        .split("|")
-        .map((s) => s.trim())
-        .filter(Boolean)
-        .slice(0, 2)
+          .split("|")
+          .map((s) => s.trim())
+          .filter(Boolean)
+          .slice(0, 2)
       : [];
+
+    const citations = citedNumbers
+      .filter((n) => n >= 1 && n <= events.length)
+      .filter((n, i, a) => a.indexOf(n) === i) // dedupe
+      .map((n) => {
+        const e = events[n - 1];
+        return {
+          id: e.id,
+          category: e.category,
+          date: e.timestamp.slice(0, 10),
+        };
+      });
 
     // Append to conversation memory for multi-turn context
     const exchange = `User: ${message}\nAssistant: ${text}\n\n`;
@@ -124,7 +160,7 @@ export async function POST(request: Request) {
       : newContext;
     await setAiContext(userId, truncated);
 
-    return NextResponse.json({ text, followUps });
+    return NextResponse.json({ text, followUps, citations });
   } catch (err) {
     if (err instanceof Error && err.message.includes("Unauthorized")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
