@@ -17,6 +17,8 @@ export interface HealthEvent {
   content: string;
   timestamp: string; // ISO 8601
   metadata?: Record<string, unknown>;
+  /** Optional tags for filtering and chat context (e.g. "cardiologist", "2024 physical"). */
+  tags?: string[];
 }
 
 export interface Summary {
@@ -51,6 +53,15 @@ export interface ChatCitation {
   id: string;
   category: string;
   date: string;
+}
+
+/** Edit overlay for an event. Stored in user:{userId}:event_edits. */
+export interface EventEdit {
+  content?: string;
+  category?: DataCategory;
+  timestamp?: string;
+  tags?: string[];
+  editedAt: string; // ISO 8601, set by server
 }
 
 /** One message as stored in Redis (role + content + optional followUps/citations). */

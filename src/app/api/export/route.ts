@@ -20,11 +20,12 @@ function csvEscape(value: string): string {
 }
 
 function buildCSV(events: HealthEvent[], summary: { content: string; version: number; createdAt: string } | null): string {
-  const header = "Date,Category,Content,ID";
+  const header = "Date,Category,Tags,Content,ID";
   const rows = events.map((e) =>
     [
       e.timestamp.slice(0, 19).replace("T", " "),
       e.category,
+      csvEscape(Array.isArray(e.tags) ? e.tags.join("; ") : ""),
       csvEscape(e.content),
       e.id,
     ].join(",")
@@ -76,7 +77,7 @@ function buildPDF(
   for (const e of events) {
     doc.setFontSize(9);
     const dateStr = e.timestamp.slice(0, 10);
-    const categoryStr = e.category.replace(/_/g, " ");
+    const categoryStr = e.category.replace(/_/g, " ") + (e.tags?.length ? ` (${e.tags.join(", ")})` : "");
     const contentSnippet =
       e.content.length <= maxContentLen ? e.content : e.content.slice(0, maxContentLen) + "…";
     const contentLines = doc.splitTextToSize(contentSnippet, colWidths[2]);

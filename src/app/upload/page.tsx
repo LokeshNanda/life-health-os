@@ -20,6 +20,7 @@ export default function UploadPage() {
   const [text, setText] = useState("");
   const [file, setFile] = useState<File | null>(null);
   const [category, setCategory] = useState<(typeof CATEGORIES)[number]>("note");
+  const [tagsInput, setTagsInput] = useState("");
   const [entryDate, setEntryDate] = useState(() => {
     const d = new Date();
     return d.toISOString().slice(0, 10); // YYYY-MM-DD for date input
@@ -131,10 +132,12 @@ export default function UploadPage() {
     try {
       if (mode === "file" && file) {
         const ts = entryDate ? `${entryDate}T12:00:00.000Z` : undefined;
-        await ingestFile(file, category, ts);
+        const tags = tagsInput.trim() ? tagsInput.split(",").map((s) => s.trim().toLowerCase()).filter(Boolean) : undefined;
+        await ingestFile(file, category, ts, tags);
       } else {
         const ts = entryDate ? `${entryDate}T12:00:00.000Z` : undefined;
-        await ingestText(text.trim(), category, ts);
+        const tags = tagsInput.trim() ? tagsInput.split(",").map((s) => s.trim().toLowerCase()).filter(Boolean) : undefined;
+        await ingestText(text.trim(), category, ts, tags);
       }
       setStatus("success");
       setMessage("Memory added successfully.");
@@ -191,6 +194,23 @@ export default function UploadPage() {
           />
           <p className="text-xs text-[var(--text-muted)] mt-1">
             When this happened (default: today). Used for timeline order.
+          </p>
+          <label
+            htmlFor="tags"
+            className="block text-sm font-medium text-[var(--text-muted)] mt-3 mb-1"
+          >
+            Tags (optional)
+          </label>
+          <input
+            id="tags"
+            type="text"
+            value={tagsInput}
+            onChange={(e) => setTagsInput(e.target.value)}
+            placeholder="e.g. cardiologist, 2024 physical"
+            className="w-full rounded-lg border border-white/20 bg-midnight/50 px-3 py-2 text-sm text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:border-neon-cyan focus:outline-none focus:ring-1 focus:ring-neon-cyan"
+          />
+          <p className="text-xs text-[var(--text-muted)] mt-1">
+            Comma-separated labels for filtering in timeline and chat.
           </p>
         </div>
 

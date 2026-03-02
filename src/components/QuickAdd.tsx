@@ -21,6 +21,7 @@ export function QuickAdd() {
   const [entryDate, setEntryDate] = useState(() =>
     new Date().toISOString().slice(0, 10)
   );
+  const [tagsInput, setTagsInput] = useState("");
   const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
   const [message, setMessage] = useState("");
 
@@ -32,7 +33,10 @@ export function QuickAdd() {
       setMessage("");
       try {
         const ts = `${entryDate}T12:00:00.000Z`;
-        await ingestText(text.trim(), category, ts);
+        const tags = tagsInput.trim()
+          ? tagsInput.split(",").map((s) => s.trim().toLowerCase()).filter(Boolean)
+          : undefined;
+        await ingestText(text.trim(), category, ts, tags);
         setStatus("success");
         setMessage("Added.");
         setText("");
@@ -44,7 +48,7 @@ export function QuickAdd() {
         setStatus("idle");
       }
     },
-    [text, category, entryDate, status]
+    [text, category, entryDate, tagsInput, status]
   );
 
   return (
@@ -88,6 +92,13 @@ export function QuickAdd() {
                 value={entryDate}
                 onChange={(e) => setEntryDate(e.target.value)}
                 className="w-full rounded-lg border border-white/20 bg-midnight/50 px-3 py-2 text-sm text-[var(--text-primary)] focus:border-neon-cyan focus:outline-none"
+              />
+              <input
+                type="text"
+                value={tagsInput}
+                onChange={(e) => setTagsInput(e.target.value)}
+                placeholder="Tags (optional, comma-separated)"
+                className="w-full rounded-lg border border-white/20 bg-midnight/50 px-3 py-2 text-sm text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:border-neon-cyan focus:outline-none"
               />
               <textarea
                 value={text}

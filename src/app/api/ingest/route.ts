@@ -26,6 +26,23 @@ function generateId(): string {
   return `evt_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
 }
 
+/** Normalize tags from array or comma-separated string to non-empty trimmed strings. */
+function normalizeTags(value: unknown): string[] {
+  if (Array.isArray(value)) {
+    return value
+      .flatMap((t) => (typeof t === "string" ? t.split(",") : []))
+      .map((s) => s.trim().toLowerCase())
+      .filter(Boolean);
+  }
+  if (typeof value === "string" && value.trim()) {
+    return value
+      .split(",")
+      .map((s) => s.trim().toLowerCase())
+      .filter(Boolean);
+  }
+  return [];
+}
+
 async function extractPdfText(file: File): Promise<string> {
   const arrayBuffer = await file.arrayBuffer();
   const buffer = Buffer.from(arrayBuffer);
@@ -105,6 +122,7 @@ export async function POST(request: Request) {
     let content: string;
     let category: DataCategory = "note";
     let timestampOverride: string | undefined;
+    let tags: string[] = [];
 
     if (contentType.includes("application/json")) {
       const body = await request.json();
@@ -113,6 +131,7 @@ export async function POST(request: Request) {
         category = body.category;
       }
       timestampOverride = body.timestamp;
+      tags = normalizeTags(body.tags);
     } else if (contentType.includes("text/plain")) {
       content = await request.text();
     } else if (contentType.includes("multipart/form-data")) {
@@ -167,6 +186,8 @@ export async function POST(request: Request) {
       if (cat && DATA_CATEGORIES.includes(cat as DataCategory)) category = cat as DataCategory;
       const ts = formData.get("timestamp");
       if (ts && typeof ts === "string") timestampOverride = ts;
+      const tagsRaw = formData.get("tags");
+      if (tagsRaw != null) tags = normalizeTags(tagsRaw);
     } else {
       return NextResponse.json(
         { error: "Unsupported content type. Use JSON, text, or multipart/form-data." },
@@ -194,6 +215,7 @@ export async function POST(request: Request) {
       category,
       content: content.trim(),
       timestamp: eventTimestamp,
+      ...(tags.length > 0 && { tags }),
     };
 
     const id = await addEvent(userId, event);

@@ -20,20 +20,21 @@ function fetchOptions(init?: RequestInit): RequestInit {
   };
 }
 
-export async function ingestText(text: string, category?: string, timestamp?: string) {
+export async function ingestText(text: string, category?: string, timestamp?: string, tags?: string[]) {
   const res = await fetch("/api/ingest", fetchOptions({
     method: "POST",
-    body: JSON.stringify({ text, category, ...(timestamp && { timestamp }) }),
+    body: JSON.stringify({ text, category, ...(timestamp && { timestamp }), ...(tags?.length && { tags }) }),
   }));
   if (!res.ok) throw new Error((await res.json()).error ?? "Ingest failed");
   return res.json();
 }
 
-export async function ingestFile(file: File, category?: string, timestamp?: string) {
+export async function ingestFile(file: File, category?: string, timestamp?: string, tags?: string[]) {
   const formData = new FormData();
   formData.append("file", file);
   if (category) formData.append("category", category);
   if (timestamp) formData.append("timestamp", timestamp);
+  if (tags?.length) formData.append("tags", tags.join(","));
 
   const res = await fetch("/api/ingest", {
     method: "POST",
@@ -73,6 +74,13 @@ export async function getEventsPage(opts?: { limit?: number; after?: string }) {
   return res.json() as Promise<{ events: import("@/lib/types").HealthEvent[]; nextCursor: string | null }>;
 }
 
+export async function getTags(): Promise<string[]> {
+  const res = await fetch("/api/tags", fetchOptions());
+  if (!res.ok) throw new Error("Failed to fetch tags");
+  const data = await res.json();
+  return Array.isArray(data.tags) ? data.tags : [];
+}
+
 export async function deleteMemory(eventId: string) {
   const res = await fetch(`/api/memory/${encodeURIComponent(eventId)}`, fetchOptions({
     method: "DELETE",
@@ -80,6 +88,49 @@ export async function deleteMemory(eventId: string) {
   if (!res.ok) {
     const data = await res.json();
     throw new Error(data.error ?? "Failed to delete memory");
+  }
+  return res.json();
+}
+
+export type UpdateMemoryBody = {
+  content?: string;
+  category?: string;
+  timestamp?: string;
+  tags?: string[];
+};
+
+export async function updateMemory(
+  eventId: string,
+  body: UpdateMemoryBody
+): Promise<{ eventId: string; editedAt: string; event?: import("@/lib/types").HealthEvent }> {
+  const res = await fetch(`/api/memory/${encodeURIComponent(eventId)}`, fetchOptions({
+    method: "PATCH",
+    body: JSON.stringify(body),
+  }));
+  if (!res.ok) {
+    const data = await res.json();
+    throw new Error(data.error ?? "Failed to update memory");
+  }
+  return res.json();
+}
+
+export async function revertMemoryEdit(eventId: string): Promise<{ eventId: string; reverted: boolean }> {
+  const res = await fetch(`/api/memory/${encodeURIComponent(eventId)}/edit`, fetchOptions({
+    method: "DELETE",
+  }));
+  if (!res.ok) {
+    const data = await res.json();
+    throw new Error(data.error ?? "Failed to revert edit");
+  }
+  return res.json();
+}
+
+export async function getMemory(eventId: string): Promise<import("@/lib/types").HealthEvent> {
+  const res = await fetch(`/api/memory/${encodeURIComponent(eventId)}`, fetchOptions());
+  if (!res.ok) {
+    if (res.status === 404) throw new Error("Event not found");
+    const data = await res.json();
+    throw new Error(data.error ?? "Failed to fetch memory");
   }
   return res.json();
 }

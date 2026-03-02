@@ -2,14 +2,23 @@
 
 import Link from "next/link";
 import { useEffect, useState, useCallback, useMemo } from "react";
-import { getEventsPage, deleteMemory, getExportData, downloadExport } from "@/lib/api";
+import { getEventsPage, deleteMemory, updateMemory, revertMemoryEdit, getMemory, getExportData, downloadExport } from "@/lib/api";
 import type { ExportFormat } from "@/lib/api";
 import type { HealthEvent, DataCategory } from "@/lib/types";
-import { Trash2, Search, Download } from "lucide-react";
+import { Trash2, Search, Download, Pencil, Undo2 } from "lucide-react";
 import { TimelineSkeleton } from "@/components/Skeleton";
 
 const CATEGORIES: (DataCategory | "all")[] = [
   "all",
+  "note",
+  "medical_event",
+  "medication",
+  "lab_result",
+  "document",
+  "voice_transcript",
+];
+
+const EDIT_CATEGORIES: DataCategory[] = [
   "note",
   "medical_event",
   "medication",
@@ -29,7 +38,8 @@ function filterEvents(
   events: HealthEvent[],
   category: DataCategory | "all",
   search: string,
-  dateRange: string
+  dateRange: string,
+  tagFilter: string | null
 ): HealthEvent[] {
   let result = events;
 
@@ -42,7 +52,8 @@ function filterEvents(
     result = result.filter(
       (e) =>
         e.content.toLowerCase().includes(q) ||
-        e.category.toLowerCase().includes(q)
+        e.category.toLowerCase().includes(q) ||
+        (e.tags?.some((t) => t.toLowerCase().includes(q)) ?? false)
     );
   }
 
@@ -53,7 +64,19 @@ function filterEvents(
     result = result.filter((e) => new Date(e.timestamp) >= cutoff);
   }
 
+  if (tagFilter) {
+    result = result.filter(
+      (e) => Array.isArray(e.tags) && e.tags.includes(tagFilter)
+    );
+  }
+
   return result;
+}
+
+/** Heuristic: content is long if it has more than 3 lines or is over ~180 chars (≈3 lines). */
+function isContentLong(content: string): boolean {
+  const lines = content.split("\n").length;
+  return lines > 3 || content.length > 180;
 }
 
 export default function TimelinePage() {
@@ -66,11 +89,33 @@ export default function TimelinePage() {
   const [categoryFilter, setCategoryFilter] = useState<DataCategory | "all">("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [dateRange, setDateRange] = useState<string>("all");
+  const [tagFilter, setTagFilter] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
+  const [editingEvent, setEditingEvent] = useState<HealthEvent | null>(null);
+  const [modalTop, setModalTop] = useState<number>(24);
+  const [editForm, setEditForm] = useState({ content: "", category: "note" as DataCategory, date: "", tags: "" });
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [revertingId, setRevertingId] = useState<string | null>(null);
+  const [expandedContentIds, setExpandedContentIds] = useState<Set<string>>(new Set());
+
+  const toggleContentExpanded = useCallback((eventId: string) => {
+    setExpandedContentIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(eventId)) next.delete(eventId);
+      else next.add(eventId);
+      return next;
+    });
+  }, []);
+
+  const allTags = useMemo(() => {
+    const set = new Set<string>();
+    events.forEach((e) => e.tags?.forEach((t) => set.add(t)));
+    return Array.from(set).sort();
+  }, [events]);
 
   const filteredEvents = useMemo(
-    () => filterEvents(events, categoryFilter, searchQuery, dateRange),
-    [events, categoryFilter, searchQuery, dateRange]
+    () => filterEvents(events, categoryFilter, searchQuery, dateRange, tagFilter),
+    [events, categoryFilter, searchQuery, dateRange, tagFilter]
   );
 
   const loadEvents = useCallback((after?: string) => {
@@ -105,10 +150,73 @@ export default function TimelinePage() {
     try {
       await deleteMemory(event.id);
       setEvents((prev) => prev.filter((e) => e.id !== event.id));
+      if (editingEvent?.id === event.id) setEditingEvent(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to delete");
     } finally {
       setDeletingId(null);
+    }
+  }
+
+  function openEditModal(event: HealthEvent, e: React.MouseEvent<HTMLButtonElement>) {
+    const el = e.currentTarget as HTMLElement;
+    const rect = el.getBoundingClientRect();
+    const vh = typeof window !== "undefined" ? window.innerHeight : 600;
+    const modalMaxH = Math.min(520, vh - 48);
+    // Position modal near the clicked row but keep it in viewport
+    const top = Math.max(16, Math.min(rect.top - 16, vh - modalMaxH - 24));
+    setModalTop(top);
+    setEditingEvent(event);
+    setEditForm({
+      content: event.content,
+      category: event.category,
+      date: event.timestamp.slice(0, 10),
+      tags: event.tags?.join(", ") ?? "",
+    });
+  }
+
+  function closeEditModal() {
+    setEditingEvent(null);
+    setSavingEdit(false);
+  }
+
+  async function handleSaveEdit() {
+    if (!editingEvent || savingEdit) return;
+    const tags = editForm.tags.trim()
+      ? editForm.tags.split(",").map((s) => s.trim().toLowerCase()).filter(Boolean)
+      : [];
+    setSavingEdit(true);
+    try {
+      const timestamp = editForm.date ? `${editForm.date}T12:00:00.000Z` : editingEvent.timestamp;
+      const res = await updateMemory(editingEvent.id, {
+        content: editForm.content.trim(),
+        category: editForm.category,
+        timestamp,
+        tags,
+      });
+      setEvents((prev) =>
+        prev.map((e) => (e.id === editingEvent.id && res.event ? res.event : e))
+      );
+      closeEditModal();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to update memory");
+    } finally {
+      setSavingEdit(false);
+    }
+  }
+
+  async function handleRevertEdit(event: HealthEvent) {
+    if (!confirm("Revert this memory to its original content? This cannot be undone.")) return;
+    setRevertingId(event.id);
+    try {
+      await revertMemoryEdit(event.id);
+      const original = await getMemory(event.id);
+      setEvents((prev) => prev.map((e) => (e.id === event.id ? original : e)));
+      if (editingEvent?.id === event.id) closeEditModal();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to revert");
+    } finally {
+      setRevertingId(null);
     }
   }
 
@@ -236,8 +344,22 @@ export default function TimelinePage() {
                 </option>
               ))}
             </select>
+            {allTags.length > 0 && (
+              <select
+                value={tagFilter ?? ""}
+                onChange={(e) => setTagFilter(e.target.value || null)}
+                className="rounded-lg border border-white/20 bg-midnight/50 px-3 py-2 text-sm text-[var(--text-primary)] focus:border-neon-cyan focus:outline-none focus:ring-1 focus:ring-neon-cyan"
+              >
+                <option value="">All tags</option>
+                {allTags.map((t) => (
+                  <option key={t} value={t}>
+                    {t}
+                  </option>
+                ))}
+              </select>
+            )}
           </div>
-          {(searchQuery || categoryFilter !== "all" || dateRange !== "all") && (
+          {(searchQuery || categoryFilter !== "all" || dateRange !== "all" || tagFilter) && (
             <p className="text-xs text-[var(--text-muted)]">
               Showing {filteredEvents.length} of {events.length} events
             </p>
@@ -276,19 +398,70 @@ export default function TimelinePage() {
                 <span className="inline-block rounded bg-neon-cyan/20 px-2 py-0.5 text-xs font-medium text-neon-cyan">
                   {event.category.replace(/_/g, " ")}
                 </span>
-                <p className="mt-1 text-sm text-[var(--text-primary)] whitespace-pre-wrap">
-                  {event.content}
-                </p>
+                {event.tags && event.tags.length > 0 && (
+                  <span className="ml-2 inline-flex flex-wrap gap-1">
+                    {event.tags.map((t) => (
+                      <span
+                        key={t}
+                        className="inline-block rounded bg-white/10 px-2 py-0.5 text-xs text-[var(--text-muted)]"
+                      >
+                        {t}
+                      </span>
+                    ))}
+                  </span>
+                )}
+                {(event.metadata as { editedAt?: string } | undefined)?.editedAt && (
+                  <span className="ml-2 text-xs text-[var(--text-muted)]" title={`Edited on ${new Date((event.metadata as { editedAt: string }).editedAt).toLocaleString()}`}>
+                    Edited
+                  </span>
+                )}
+                <div className="mt-1">
+                  <p
+                    className={`text-sm text-[var(--text-primary)] whitespace-pre-wrap ${!expandedContentIds.has(event.id) && isContentLong(event.content) ? "line-clamp-3" : ""}`}
+                  >
+                    {event.content}
+                  </p>
+                  {isContentLong(event.content) && (
+                    <button
+                      type="button"
+                      onClick={() => toggleContentExpanded(event.id)}
+                      className="mt-1 text-xs font-medium text-neon-cyan hover:underline focus:outline-none focus:underline"
+                    >
+                      {expandedContentIds.has(event.id) ? "See less" : "See more"}
+                    </button>
+                  )}
+                </div>
               </div>
-              <button
-                type="button"
-                onClick={() => handleDelete(event)}
-                disabled={deletingId === event.id}
-                className="shrink-0 p-2 rounded-lg text-[var(--text-muted)] hover:bg-red-500/20 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all disabled:opacity-50"
-                title="Delete memory"
-              >
-                <Trash2 className="h-4 w-4" />
-              </button>
+              <div className="shrink-0 flex items-center gap-0.5">
+                <button
+                  type="button"
+                  onClick={(e) => openEditModal(event, e)}
+                  className="p-2 rounded-lg text-[var(--text-muted)] hover:bg-neon-cyan/20 hover:text-neon-cyan"
+                  title="Edit memory"
+                >
+                  <Pencil className="h-4 w-4" />
+                </button>
+                {(event.metadata as { editedAt?: string } | undefined)?.editedAt && (
+                  <button
+                    type="button"
+                    onClick={() => handleRevertEdit(event)}
+                    disabled={revertingId === event.id}
+                    className="p-2 rounded-lg text-[var(--text-muted)] hover:bg-white/10 hover:text-[var(--text-primary)] disabled:opacity-50"
+                    title="Revert to original"
+                  >
+                    <Undo2 className="h-4 w-4" />
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => handleDelete(event)}
+                  disabled={deletingId === event.id}
+                  className="shrink-0 p-2 rounded-lg text-[var(--text-muted)] hover:bg-red-500/20 hover:text-red-400 disabled:opacity-50"
+                  title="Delete memory"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              </div>
             </div>
           ))}
           {nextCursor && (
@@ -303,6 +476,96 @@ export default function TimelinePage() {
               </button>
             </div>
           )}
+        </div>
+      )}
+
+      {editingEvent && (
+        <div
+          className="fixed inset-0 z-[9999] flex items-start justify-center overflow-y-auto p-4 bg-black/60"
+          style={{ paddingTop: modalTop }}
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="edit-memory-title"
+        >
+          <div className="glass-panel glass-panel-glow rounded-xl w-full max-w-lg max-h-[85vh] overflow-y-auto p-4 shadow-xl">
+            <h2 id="edit-memory-title" className="text-lg font-semibold text-[var(--text-primary)] mb-4">
+              Edit memory
+            </h2>
+            <div className="space-y-4">
+              <div>
+                <label htmlFor="edit-content" className="block text-sm font-medium text-[var(--text-muted)] mb-1">
+                  Content
+                </label>
+                <textarea
+                  id="edit-content"
+                  value={editForm.content}
+                  onChange={(e) => setEditForm((f) => ({ ...f, content: e.target.value }))}
+                  rows={5}
+                  className="w-full rounded-lg border border-white/20 bg-midnight/50 px-3 py-2 text-sm text-[var(--text-primary)] focus:border-neon-cyan focus:outline-none focus:ring-1 focus:ring-neon-cyan"
+                />
+              </div>
+              <div>
+                <label htmlFor="edit-category" className="block text-sm font-medium text-[var(--text-muted)] mb-1">
+                  Category
+                </label>
+                <select
+                  id="edit-category"
+                  value={editForm.category}
+                  onChange={(e) => setEditForm((f) => ({ ...f, category: e.target.value as DataCategory }))}
+                  className="w-full rounded-lg border border-white/20 bg-midnight/50 px-3 py-2 text-sm text-[var(--text-primary)] focus:border-neon-cyan focus:outline-none focus:ring-1 focus:ring-neon-cyan"
+                >
+                  {EDIT_CATEGORIES.map((c) => (
+                    <option key={c} value={c}>
+                      {c.replace(/_/g, " ")}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label htmlFor="edit-date" className="block text-sm font-medium text-[var(--text-muted)] mb-1">
+                  Date
+                </label>
+                <input
+                  id="edit-date"
+                  type="date"
+                  value={editForm.date}
+                  onChange={(e) => setEditForm((f) => ({ ...f, date: e.target.value }))}
+                  className="w-full rounded-lg border border-white/20 bg-midnight/50 px-3 py-2 text-sm text-[var(--text-primary)] focus:border-neon-cyan focus:outline-none focus:ring-1 focus:ring-neon-cyan"
+                />
+              </div>
+              <div>
+                <label htmlFor="edit-tags" className="block text-sm font-medium text-[var(--text-muted)] mb-1">
+                  Tags (comma-separated)
+                </label>
+                <input
+                  id="edit-tags"
+                  type="text"
+                  value={editForm.tags}
+                  onChange={(e) => setEditForm((f) => ({ ...f, tags: e.target.value }))}
+                  placeholder="e.g. cardiologist, 2024 physical"
+                  className="w-full rounded-lg border border-white/20 bg-midnight/50 px-3 py-2 text-sm text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:border-neon-cyan focus:outline-none focus:ring-1 focus:ring-neon-cyan"
+                />
+              </div>
+            </div>
+            <div className="flex gap-2 mt-6">
+              <button
+                type="button"
+                onClick={handleSaveEdit}
+                disabled={savingEdit || !editForm.content.trim()}
+                className="rounded-lg bg-neon-cyan/20 border border-neon-cyan/50 px-4 py-2 text-sm font-medium text-neon-cyan hover:bg-neon-cyan/30 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+              >
+                {savingEdit ? "Saving..." : "Save"}
+              </button>
+              <button
+                type="button"
+                onClick={closeEditModal}
+                disabled={savingEdit}
+                className="rounded-lg border border-white/20 px-4 py-2 text-sm font-medium text-[var(--text-muted)] hover:bg-white/5 hover:text-[var(--text-primary)] disabled:opacity-50 transition-all"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

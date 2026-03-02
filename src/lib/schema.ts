@@ -16,6 +16,7 @@ export const keys = {
   meta: (userId: string) => `user:${userId}:meta`,
   summaryVersions: (userId: string) => `user:${userId}:summary_versions`,
   deleted: (userId: string) => `user:${userId}:deleted`,
+  eventEdits: (userId: string) => `user:${userId}:event_edits`,
   chatSessionsZset: (userId: string) => `user:${userId}:chat_sessions`,
   chatSessionMeta: (userId: string, sessionId: string) =>
     `user:${userId}:chat_session:${sessionId}`,

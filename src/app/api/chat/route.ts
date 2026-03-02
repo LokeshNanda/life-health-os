@@ -32,7 +32,7 @@ CRITICAL RULES - YOU MUST FOLLOW:
 7. Optionally, after your reply add exactly one line: FOLLOWUPS: question1 | question2 (two short follow-up questions the user might ask next). If no follow-ups are helpful, do not add this line. Put CITED before FOLLOWUPS if both are present.`;
 
 function buildContext(
-  events: { id: string; category: string; content: string; timestamp: string }[],
+  events: { id: string; category: string; content: string; timestamp: string; tags?: string[] }[],
   summary: { content: string } | null,
   sessionContext: string | null
 ): string {
@@ -48,7 +48,8 @@ function buildContext(
 
   parts.push("## Raw Health Events (chronological)\nEach event has a number in parentheses; cite these numbers when you use that event.\n");
   events.forEach((e, i) => {
-    parts.push(`(${i + 1}) [${e.timestamp}] ${e.category}: ${e.content}`);
+    const tagStr = e.tags?.length ? ` [tags: ${e.tags.join(", ")}]` : "";
+    parts.push(`(${i + 1}) [${e.timestamp}] ${e.category}${tagStr}: ${e.content}`);
   });
 
   return parts.join("\n\n");
@@ -70,7 +71,7 @@ function parseCitedIds(text: string): { text: string; citedNumbers: number[] } {
 export async function POST(request: Request) {
   try {
     const userId = await getUserId(request);
-    let body: { message?: string; sessionId?: string | null };
+    let body: { message?: string; sessionId?: string | null; tags?: string[] };
     try {
       body = await request.json();
     } catch {
@@ -79,7 +80,7 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
-    const { message, sessionId: bodySessionId } = body;
+    const { message, sessionId: bodySessionId, tags: filterTags } = body;
 
     if (!message || typeof message !== "string") {
       return NextResponse.json(
@@ -95,10 +96,19 @@ export async function POST(request: Request) {
       );
     }
 
-    const [events, summary] = await Promise.all([
+    const [eventsRaw, summary] = await Promise.all([
       getEvents(userId),
       getLatestSummary(userId),
     ]);
+
+    const events =
+      Array.isArray(filterTags) && filterTags.length > 0
+        ? eventsRaw.filter(
+            (e) =>
+              Array.isArray(e.tags) &&
+              e.tags.some((t) => filterTags.includes(t))
+          )
+        : eventsRaw;
 
     let sessionId: string;
     let sessionMessages: StoredChatMessage[] = [];

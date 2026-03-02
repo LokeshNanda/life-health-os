@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { getChatSessions, getChatSession, deleteChatSession, type ChatSessionMeta } from "@/lib/api";
+import { getChatSessions, getChatSession, deleteChatSession, getTags, type ChatSessionMeta } from "@/lib/api";
 import { MessageSquarePlus, Trash2, MessageCircle } from "lucide-react";
 
 interface Citation {
@@ -32,12 +32,18 @@ export default function ChatPage() {
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [sessions, setSessions] = useState<ChatSessionMeta[]>([]);
   const [sessionsLoading, setSessionsLoading] = useState(true);
+  const [availableTags, setAvailableTags] = useState<string[]>([]);
+  const [scopeTags, setScopeTags] = useState<string[]>([]);
 
   const fetchSessions = useCallback(async () => {
     setSessionsLoading(true);
     try {
-      const { sessions: list } = await getChatSessions();
-      setSessions(list);
+      const [sessionsRes, tagsRes] = await Promise.all([
+        getChatSessions(),
+        getTags().catch(() => []),
+      ]);
+      setSessions(sessionsRes.sessions);
+      setAvailableTags(tagsRes);
     } catch {
       setSessions([]);
     } finally {
@@ -89,7 +95,11 @@ export default function ChatPage() {
             "x-user-id": process.env.NEXT_PUBLIC_DEV_USER_ID,
           }),
         },
-        body: JSON.stringify({ message: userMessage, sessionId: sessionId ?? undefined }),
+        body: JSON.stringify({
+          message: userMessage,
+          sessionId: sessionId ?? undefined,
+          ...(scopeTags.length > 0 && { tags: scopeTags }),
+        }),
       });
       const data = await res.json();
       const text = data.text ?? (data.error ? `Error: ${data.error}` : "No response.");
@@ -185,6 +195,32 @@ export default function ChatPage() {
       <p className="text-[var(--text-muted)] mb-4">
         Ask questions about your health records. AI answers only from your data.
       </p>
+      {availableTags.length > 0 && (
+        <div className="mb-4 flex flex-wrap items-center gap-2">
+          <span className="text-sm text-[var(--text-muted)]">Scope to tags:</span>
+          <select
+            value={scopeTags[0] ?? ""}
+            onChange={(e) => setScopeTags(e.target.value ? [e.target.value] : [])}
+            className="rounded-lg border border-white/20 bg-midnight/50 px-3 py-1.5 text-sm text-[var(--text-primary)] focus:border-neon-cyan focus:outline-none focus:ring-1 focus:ring-neon-cyan"
+          >
+            <option value="">All events</option>
+            {availableTags.map((t) => (
+              <option key={t} value={t}>
+                {t}
+              </option>
+            ))}
+          </select>
+          {scopeTags.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setScopeTags([])}
+              className="text-xs text-[var(--text-muted)] hover:text-neon-cyan"
+            >
+              Clear
+            </button>
+          )}
+        </div>
+      )}
 
       <div className="glass-panel glass-panel-glow rounded-xl flex-1 flex flex-col overflow-hidden">
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
