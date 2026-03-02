@@ -17,6 +17,7 @@ import type {
   ChatSessionMeta,
   StoredChatMessage,
   EventEdit,
+  UserProfile,
 } from "./types";
 
 const AI_CONTEXT_MAX_SIZE = 16 * 1024; // 16KB bounded context
@@ -383,4 +384,36 @@ export async function searchChat(
   }
 
   return { sessions: out.slice(0, SEARCH_RESULTS_MAX) };
+}
+
+// --- User profile ---
+
+export async function getProfile(userId: string): Promise<UserProfile | null> {
+  const raw = await redis.get<string>(keys.profile(userId));
+  if (raw == null) return null;
+  try {
+    const data = typeof raw === "string" ? JSON.parse(raw) : raw;
+    if (data && typeof data.updatedAt === "string") return data as UserProfile;
+  } catch {
+    /* ignore */
+  }
+  return null;
+}
+
+export async function setProfile(
+  userId: string,
+  updates: Partial<Pick<UserProfile, "displayName" | "firstName" | "lastName" | "preferredGreeting">>
+): Promise<UserProfile> {
+  const now = new Date().toISOString();
+  const existing = await getProfile(userId);
+  const profile: UserProfile = {
+    displayName: updates.displayName ?? existing?.displayName,
+    firstName: updates.firstName ?? existing?.firstName,
+    lastName: updates.lastName ?? existing?.lastName,
+    preferredGreeting: updates.preferredGreeting ?? existing?.preferredGreeting,
+    createdAt: existing?.createdAt ?? now,
+    updatedAt: now,
+  };
+  await redis.set(keys.profile(userId), JSON.stringify(profile));
+  return profile;
 }

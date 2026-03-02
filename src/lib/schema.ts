@@ -7,6 +7,7 @@
  * user:{userId}:chat_sessions - ZSET (score = updatedAt ms, member = sessionId)
  * user:{userId}:chat_session:{sessionId} - Hash (title, createdAt, updatedAt)
  * user:{userId}:chat_session:{sessionId}:messages - List (JSON messages, chronological)
+ * user:{userId}:profile - Redis String (JSON) - user profile for personalization
  */
 
 export const keys = {
@@ -22,4 +23,5 @@ export const keys = {
     `user:${userId}:chat_session:${sessionId}`,
   chatSessionMessages: (userId: string, sessionId: string) =>
     `user:${userId}:chat_session:${sessionId}:messages`,
+  profile: (userId: string) => `user:${userId}:profile`,
 } as const;

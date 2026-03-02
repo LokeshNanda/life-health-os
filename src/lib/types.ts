@@ -72,3 +72,13 @@ export interface StoredChatMessage {
   citations?: ChatCitation[];
   createdAt: string;
 }
+
+/** User profile for personalization (greeting, display name). */
+export interface UserProfile {
+  displayName?: string;
+  firstName?: string;
+  lastName?: string;
+  preferredGreeting?: string;
+  createdAt: string;
+  updatedAt: string;
+}

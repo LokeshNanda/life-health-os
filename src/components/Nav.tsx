@@ -13,6 +13,7 @@ import {
   PanelLeft,
   X,
   Search,
+  User,
 } from "lucide-react";
 
 const navItems = [
@@ -22,6 +23,7 @@ const navItems = [
   { href: "/chat", label: "AI Chat", icon: MessageSquare },
   { href: "/dashboard", label: "Memory Size", icon: BarChart3 },
   { href: "/summarize", label: "Summarize", icon: FileText },
+  { href: "/profile", label: "Profile", icon: User },
 ];
 
 const STORAGE_KEY = "sidebar-collapsed";

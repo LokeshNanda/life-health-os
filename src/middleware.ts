@@ -1,19 +1,17 @@
-import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
+import { clerkMiddleware } from "@clerk/nextjs/server";
 
-const isProtectedRoute = createRouteMatcher([
-  "/upload",
-  "/chat",
-  "/timeline",
-  "/dashboard",
-  "/summarize",
-]);
+// Force sign-in for all routes except Clerk auth pages (pathname-based to avoid matcher quirks)
+function isPublicPath(pathname: string): boolean {
+  return pathname.startsWith("/sign-in") || pathname.startsWith("/sign-up");
+}
 
 export default clerkMiddleware(async (auth, req) => {
-  // E2E tests: bypass auth when E2E_BYPASS_AUTH=true
-  if (process.env.E2E_BYPASS_AUTH === "true") {
-    return;
+  if (process.env.E2E_BYPASS_AUTH === "true") return;
+
+  const pathname = req.nextUrl.pathname;
+  if (!isPublicPath(pathname)) {
+    await auth.protect();
   }
-  if (isProtectedRoute(req)) await auth.protect();
 });
 
 export const config = {
