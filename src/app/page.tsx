@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { getMemoryStats, getEventsPage } from "@/lib/api";
 import { Clock, FileText } from "lucide-react";
+import { OnboardingChecklist } from "@/components/OnboardingChecklist";
 
 type Profile = {
   displayName?: string;
@@ -73,6 +74,37 @@ export default function HomePage() {
         recommend treatments.
       </div>
 
+      <OnboardingChecklist
+        entriesCount={stats?.entries ?? 0}
+        hasSummarized={!!stats?.lastSummarized}
+      />
+
+      <div className="mt-6 glass-panel rounded-xl p-4 animate-fade-slide-up">
+        <h2 className="text-sm font-medium text-[var(--text-muted)] mb-2">Quick ask</h2>
+        <form onSubmit={handleQuickAsk} className="flex gap-2">
+          <input
+            type="text"
+            value={quickAsk}
+            onChange={(e) => setQuickAsk(e.target.value)}
+            placeholder="Ask a question about your health records..."
+            className="flex-1 rounded-lg border border-white/20 bg-midnight/50 px-3 py-2 text-sm text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:border-neon-cyan focus:outline-none focus:ring-1 focus:ring-neon-cyan"
+          />
+          <button
+            type="submit"
+            disabled={!quickAsk.trim()}
+            className="rounded-lg bg-neon-cyan/20 border border-neon-cyan/50 px-4 py-2 text-sm font-medium text-neon-cyan hover:bg-neon-cyan/30 disabled:opacity-50 shrink-0"
+          >
+            Ask
+          </button>
+        </form>
+        {(stats?.entries ?? 0) === 0 && (
+          <p className="mt-2 text-xs text-[var(--text-muted)]">
+            Add memories first so the AI can answer from your data.{" "}
+            <Link href="/upload" className="text-neon-cyan hover:underline">Add memory</Link>
+          </p>
+        )}
+      </div>
+
       {(stats?.entries ?? 0) > 0 && (
         <div className="mt-6 grid gap-4 sm:grid-cols-2">
           {recentEvents.length > 0 && (
@@ -115,25 +147,6 @@ export default function HomePage() {
               </Link>
             </div>
           )}
-          <div className="glass-panel rounded-xl p-4 sm:col-span-2 animate-fade-slide-up">
-            <h2 className="text-sm font-medium text-[var(--text-muted)] mb-2">Quick ask</h2>
-            <form onSubmit={handleQuickAsk} className="flex gap-2">
-              <input
-                type="text"
-                value={quickAsk}
-                onChange={(e) => setQuickAsk(e.target.value)}
-                placeholder="Ask a question about your health records..."
-                className="flex-1 rounded-lg border border-white/20 bg-midnight/50 px-3 py-2 text-sm text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:border-neon-cyan focus:outline-none focus:ring-1 focus:ring-neon-cyan"
-              />
-              <button
-                type="submit"
-                disabled={!quickAsk.trim()}
-                className="rounded-lg bg-neon-cyan/20 border border-neon-cyan/50 px-4 py-2 text-sm font-medium text-neon-cyan hover:bg-neon-cyan/30 disabled:opacity-50 shrink-0"
-              >
-                Ask
-              </button>
-            </form>
-          </div>
         </div>
       )}
 

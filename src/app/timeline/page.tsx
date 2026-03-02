@@ -9,6 +9,7 @@ import type { HealthEvent, DataCategory } from "@/lib/types";
 import { Trash2, Search, Download, Pencil, Undo2, Star } from "lucide-react";
 import { TimelineSkeleton } from "@/components/Skeleton";
 import { MarkdownViewer } from "@/components/MarkdownViewer";
+import { TagInput } from "@/components/TagInput";
 
 const CATEGORIES: (DataCategory | "all")[] = [
   "all",
@@ -116,7 +117,7 @@ export default function TimelinePage() {
   const [exporting, setExporting] = useState(false);
   const [editingEvent, setEditingEvent] = useState<HealthEvent | null>(null);
   const [modalTop, setModalTop] = useState<number>(24);
-  const [editForm, setEditForm] = useState({ content: "", category: "note" as DataCategory, date: "", tags: "" });
+  const [editForm, setEditForm] = useState({ content: "", category: "note" as DataCategory, date: "", tags: [] as string[] });
   const [savingEdit, setSavingEdit] = useState(false);
   const [revertingId, setRevertingId] = useState<string | null>(null);
   const [expandedContentIds, setExpandedContentIds] = useState<Set<string>>(new Set());
@@ -251,7 +252,7 @@ export default function TimelinePage() {
       content: event.content,
       category: event.category,
       date: event.timestamp.slice(0, 10),
-      tags: event.tags?.join(", ") ?? "",
+      tags: event.tags ?? [],
     });
   }
 
@@ -262,9 +263,6 @@ export default function TimelinePage() {
 
   async function handleSaveEdit() {
     if (!editingEvent || savingEdit) return;
-    const tags = editForm.tags.trim()
-      ? editForm.tags.split(",").map((s) => s.trim().toLowerCase()).filter(Boolean)
-      : [];
     setSavingEdit(true);
     try {
       const timestamp = editForm.date ? `${editForm.date}T12:00:00.000Z` : editingEvent.timestamp;
@@ -272,7 +270,7 @@ export default function TimelinePage() {
         content: editForm.content.trim(),
         category: editForm.category,
         timestamp,
-        tags,
+        tags: editForm.tags,
       });
       setEvents((prev) =>
         prev.map((e) => (e.id === editingEvent.id && res.event ? res.event : e))
@@ -675,15 +673,14 @@ export default function TimelinePage() {
               </div>
               <div>
                 <label htmlFor="edit-tags" className="block text-sm font-medium text-[var(--text-muted)] mb-1">
-                  Tags (comma-separated)
+                  Tags (comma-separated or type and press Enter)
                 </label>
-                <input
+                <TagInput
                   id="edit-tags"
-                  type="text"
                   value={editForm.tags}
-                  onChange={(e) => setEditForm((f) => ({ ...f, tags: e.target.value }))}
+                  onChange={(tags) => setEditForm((f) => ({ ...f, tags }))}
                   placeholder="e.g. cardiologist, 2024 physical"
-                  className="w-full rounded-lg border border-white/20 bg-midnight/50 px-3 py-2 text-sm text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:border-neon-cyan focus:outline-none focus:ring-1 focus:ring-neon-cyan"
+                  disabled={savingEdit}
                 />
               </div>
             </div>

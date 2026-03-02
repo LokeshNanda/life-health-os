@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { getChatSessions, getChatSession, deleteChatSession, getTags, type ChatSessionMeta } from "@/lib/api";
+import { getChatSessions, getChatSession, deleteChatSession, getTags, getMemoryStats, type ChatSessionMeta } from "@/lib/api";
 import { MessageSquarePlus, Trash2, MessageCircle } from "lucide-react";
 import { MarkdownViewer } from "@/components/MarkdownViewer";
 
@@ -40,6 +40,7 @@ export default function ChatPage() {
   const [sessionsLoading, setSessionsLoading] = useState(true);
   const [availableTags, setAvailableTags] = useState<string[]>([]);
   const [scopeTags, setScopeTags] = useState<string[]>([]);
+  const [entriesCount, setEntriesCount] = useState<number | null>(null);
   const chatInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -56,12 +57,14 @@ export default function ChatPage() {
   const fetchSessions = useCallback(async () => {
     setSessionsLoading(true);
     try {
-      const [sessionsRes, tagsRes] = await Promise.all([
+      const [sessionsRes, tagsRes, statsRes] = await Promise.all([
         getChatSessions(),
         getTags().catch(() => []),
+        getMemoryStats().catch(() => ({ entries: 0 })),
       ]);
       setSessions(sessionsRes.sessions);
       setAvailableTags(tagsRes);
+      setEntriesCount(typeof statsRes?.entries === "number" ? statsRes.entries : 0);
     } catch {
       setSessions([]);
     } finally {
@@ -302,6 +305,12 @@ export default function ChatPage() {
       <p className="text-[var(--text-muted)] mb-4 shrink-0">
         Ask questions about your health records. AI answers only from your data.
       </p>
+      {entriesCount === 0 && !sessionsLoading && (
+        <div className="mb-4 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200/90">
+          <strong>No memories yet.</strong> Add memories first so the AI can answer from your data.{" "}
+          <Link href="/upload" className="font-medium text-neon-cyan hover:underline">Add memory →</Link>
+        </div>
+      )}
       {availableTags.length > 0 && (
         <div className="mb-4 flex flex-wrap items-center gap-2 shrink-0">
           <span className="text-sm text-[var(--text-muted)]">Scope to tags:</span>

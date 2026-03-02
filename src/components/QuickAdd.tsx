@@ -4,6 +4,7 @@ import { useState, useCallback, useEffect } from "react";
 import { SignedIn } from "@clerk/nextjs";
 import { ingestText } from "@/lib/api";
 import { Plus } from "lucide-react";
+import { TagInput } from "@/components/TagInput";
 
 const CATEGORIES = [
   "note",
@@ -21,7 +22,7 @@ export function QuickAdd() {
   const [entryDate, setEntryDate] = useState(() =>
     new Date().toISOString().slice(0, 10)
   );
-  const [tagsInput, setTagsInput] = useState("");
+  const [tags, setTags] = useState<string[]>([]);
   const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
   const [message, setMessage] = useState("");
 
@@ -33,13 +34,11 @@ export function QuickAdd() {
       setMessage("");
       try {
         const ts = `${entryDate}T12:00:00.000Z`;
-        const tags = tagsInput.trim()
-          ? tagsInput.split(",").map((s) => s.trim().toLowerCase()).filter(Boolean)
-          : undefined;
-        await ingestText(text.trim(), category, ts, tags);
+        await ingestText(text.trim(), category, ts, tags.length > 0 ? tags : undefined);
         setStatus("success");
         setMessage("Added.");
         setText("");
+        setTags([]);
         setOpen(false);
       } catch (err) {
         setStatus("error");
@@ -48,7 +47,7 @@ export function QuickAdd() {
         setStatus("idle");
       }
     },
-    [text, category, entryDate, tagsInput, status]
+    [text, category, entryDate, tags, status]
   );
 
   useEffect(() => {
@@ -107,12 +106,10 @@ export function QuickAdd() {
                 onChange={(e) => setEntryDate(e.target.value)}
                 className="w-full rounded-lg border border-white/20 bg-midnight/50 px-3 py-2 text-sm text-[var(--text-primary)] focus:border-neon-cyan focus:outline-none"
               />
-              <input
-                type="text"
-                value={tagsInput}
-                onChange={(e) => setTagsInput(e.target.value)}
-                placeholder="Tags (optional, comma-separated)"
-                className="w-full rounded-lg border border-white/20 bg-midnight/50 px-3 py-2 text-sm text-[var(--text-primary)] placeholder-[var(--text-muted)] focus:border-neon-cyan focus:outline-none"
+              <TagInput
+                value={tags}
+                onChange={setTags}
+                placeholder="Tags (optional)"
               />
               <textarea
                 value={text}
