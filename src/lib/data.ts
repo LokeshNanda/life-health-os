@@ -143,34 +143,31 @@ export async function getEventById(
 }
 
 const TIMELINE_PAGE_SIZE = 30;
-/** Max events to fetch for timeline so we can sort by event date (timestamp), not upload order. */
-const TIMELINE_FETCH_SIZE = 2000;
+/** Max events to fetch and sort by date (for timeline "by event date" ordering). */
+const TIMELINE_FETCH_CAP = 1000;
 
 export type EventsPage = { events: HealthEvent[]; nextCursor: string | null };
 
-/**
- * Returns timeline events ordered by event date (timestamp) newest first.
- * Cursor is an ISO timestamp; "before" means return events with timestamp < before.
- */
+/** Compare event timestamps (ISO); for sort descending (latest first). */
+function byTimestampDesc(a: HealthEvent, b: HealthEvent): number {
+  return new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
+}
+
 export async function getEventsPage(
   userId: string,
   opts: { limit?: number; before?: string } = {}
 ): Promise<EventsPage> {
   const limit = opts.limit ?? TIMELINE_PAGE_SIZE;
-  const beforeTimestamp = opts.before ?? null;
-  // Fetch a large batch so we can sort by event date (when it happened), not stream order (when uploaded)
-  const eventsRaw = await getEvents(userId, TIMELINE_FETCH_SIZE);
-  const sorted = [...eventsRaw].sort(
-    (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
-  );
+  const beforeTimestamp = opts.before ?? undefined;
+  // Fetch a bounded set, then sort by event occurrence date (timestamp) latest first.
+  const events = await getEvents(userId, TIMELINE_FETCH_CAP);
+  const sorted = [...events].sort(byTimestampDesc);
   const filtered = beforeTimestamp
     ? sorted.filter((e) => e.timestamp < beforeTimestamp)
     : sorted;
   const page = filtered.slice(0, limit);
   const nextCursor =
-    page.length >= limit && filtered.length > limit
-      ? page[page.length - 1].timestamp
-      : null;
+    filtered.length > limit ? page[page.length - 1].timestamp : null;
   return { events: page, nextCursor };
 }
 

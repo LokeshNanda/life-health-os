@@ -1,6 +1,6 @@
 /**
  * GET /api/timeline
- * Returns user's health events for timeline view (newest by event date first).
+ * Returns user's health events for timeline view, sorted by event date (latest first).
  * Query: limit (default 30), before (ISO timestamp cursor for next page of older events)
  */
 

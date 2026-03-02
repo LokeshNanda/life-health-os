@@ -149,8 +149,9 @@ export default function ChatPage() {
   }
 
   return (
-    <div className="mx-auto max-w-4xl flex gap-4 h-[calc(100vh-4rem)] animate-fade-slide-up">
-      <aside className="w-52 shrink-0 flex flex-col border border-white/10 rounded-xl bg-midnight-charcoal/50 overflow-hidden">
+    <div className="mx-auto max-w-4xl flex flex-1 flex-col min-h-0 gap-4 animate-fade-slide-up">
+      <div className="flex flex-1 gap-4 min-h-0">
+      <aside className="w-52 shrink-0 flex flex-col border border-white/10 rounded-xl bg-midnight-charcoal/50 overflow-hidden min-h-0">
         <button
           type="button"
           onClick={handleNewChat}
@@ -200,13 +201,13 @@ export default function ChatPage() {
         </div>
       </aside>
 
-      <div className="flex-1 flex flex-col min-w-0">
-      <h1 className="text-2xl font-semibold text-[var(--text-primary)] mb-2">AI Chat</h1>
-      <p className="text-[var(--text-muted)] mb-4">
+      <div className="flex-1 flex flex-col min-w-0 min-h-0">
+      <h1 className="text-2xl font-semibold text-[var(--text-primary)] mb-2 shrink-0">AI Chat</h1>
+      <p className="text-[var(--text-muted)] mb-4 shrink-0">
         Ask questions about your health records. AI answers only from your data.
       </p>
       {availableTags.length > 0 && (
-        <div className="mb-4 flex flex-wrap items-center gap-2">
+        <div className="mb-4 flex flex-wrap items-center gap-2 shrink-0">
           <span className="text-sm text-[var(--text-muted)]">Scope to tags:</span>
           <select
             value={scopeTags[0] ?? ""}
@@ -232,8 +233,8 @@ export default function ChatPage() {
         </div>
       )}
 
-      <div className="glass-panel glass-panel-glow rounded-xl flex-1 flex flex-col overflow-hidden">
-        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      <div className="glass-panel glass-panel-glow rounded-xl flex-1 flex flex-col min-h-0 overflow-hidden">
+        <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 space-y-4 min-h-0">
           {messages.length === 0 && (
             <div className="py-8 space-y-4">
               <p className="text-sm text-[var(--text-muted)] text-center">
@@ -307,7 +308,7 @@ export default function ChatPage() {
           )}
         </div>
 
-        <form onSubmit={handleSubmit} className="p-4 border-t border-white/10 flex gap-2">
+        <form onSubmit={handleSubmit} className="p-4 border-t border-white/10 flex gap-2 shrink-0">
           <input
             value={input}
             onChange={(e) => setInput(e.target.value)}
@@ -325,6 +326,7 @@ export default function ChatPage() {
             Send
           </button>
         </form>
+      </div>
       </div>
       </div>
     </div>
