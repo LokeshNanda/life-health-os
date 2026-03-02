@@ -13,6 +13,7 @@
   "dependencies": {
     "@clerk/nextjs": "^6.39.0",
     "@upstash/redis": "^1.34.3",
+    "jspdf": "^4.2.0",
     "lucide-react": "^0.468.0",
     "next": "^15.2.3",
     "openai": "^4.73.0",

@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { useEffect, useState, useCallback, useMemo } from "react";
-import { getEventsPage, deleteMemory, getExportData } from "@/lib/api";
+import { getEventsPage, deleteMemory, getExportData, downloadExport } from "@/lib/api";
+import type { ExportFormat } from "@/lib/api";
 import type { HealthEvent, DataCategory } from "@/lib/types";
 import { Trash2, Search, Download } from "lucide-react";
 import { TimelineSkeleton } from "@/components/Skeleton";
@@ -129,6 +130,15 @@ export default function TimelinePage() {
     }
   }
 
+  async function handleExportFormat(format: ExportFormat) {
+    setExporting(true);
+    try {
+      await downloadExport(format);
+    } finally {
+      setExporting(false);
+    }
+  }
+
   if (loading) {
     return (
       <div className="max-w-2xl">
@@ -161,15 +171,33 @@ export default function TimelinePage() {
           Your health events in chronological order. Timeline-first navigation.
         </p>
         {events.length > 0 && (
-          <button
-            type="button"
-            onClick={handleExport}
-            disabled={exporting}
-            className="flex items-center gap-2 rounded-lg bg-neon-cyan/20 border border-neon-cyan/50 px-3 py-1.5 text-sm font-medium text-neon-cyan hover:bg-neon-cyan/30 disabled:opacity-50 transition-all"
-          >
-            <Download className="h-4 w-4" />
-            {exporting ? "Exporting..." : "Export"}
-          </button>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={handleExport}
+              disabled={exporting}
+              className="flex items-center gap-2 rounded-lg bg-neon-cyan/20 border border-neon-cyan/50 px-3 py-1.5 text-sm font-medium text-neon-cyan hover:bg-neon-cyan/30 disabled:opacity-50 transition-all"
+            >
+              <Download className="h-4 w-4" />
+              {exporting ? "Exporting..." : "JSON"}
+            </button>
+            <button
+              type="button"
+              onClick={() => handleExportFormat("csv")}
+              disabled={exporting}
+              className="flex items-center gap-2 rounded-lg border border-white/20 px-3 py-1.5 text-sm font-medium text-[var(--text-muted)] hover:bg-white/5 hover:text-[var(--text-primary)] disabled:opacity-50 transition-all"
+            >
+              CSV
+            </button>
+            <button
+              type="button"
+              onClick={() => handleExportFormat("pdf")}
+              disabled={exporting}
+              className="flex items-center gap-2 rounded-lg border border-white/20 px-3 py-1.5 text-sm font-medium text-[var(--text-muted)] hover:bg-white/5 hover:text-[var(--text-primary)] disabled:opacity-50 transition-all"
+            >
+              PDF
+            </button>
+          </div>
         )}
       </div>
 

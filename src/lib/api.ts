@@ -94,6 +94,40 @@ export async function getExportData(): Promise<{
   return res.json();
 }
 
+export type ExportFormat = "json" | "csv" | "pdf";
+
+const EXPORT_FILENAME_PREFIX = "health-memory-export";
+
+/** Download export as CSV or PDF (blob). For JSON use getExportData() and build blob client-side. */
+export async function downloadExport(format: ExportFormat): Promise<void> {
+  if (format === "json") {
+    const data = await getExportData();
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${EXPORT_FILENAME_PREFIX}-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    return;
+  }
+  const res = await fetch(`/api/export?format=${format}`, {
+    credentials: "include",
+    headers: process.env.NEXT_PUBLIC_DEV_USER_ID ? { "x-user-id": process.env.NEXT_PUBLIC_DEV_USER_ID } : {},
+  });
+  if (!res.ok) throw new Error("Failed to export");
+  const blob = await res.blob();
+  const filename =
+    res.headers.get("Content-Disposition")?.match(/filename="?([^";\n]+)"?/)?.[1] ||
+    `${EXPORT_FILENAME_PREFIX}-${new Date().toISOString().slice(0, 10)}.${format === "csv" ? "csv" : "pdf"}`;
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
 export async function summarize() {
   const res = await fetch("/api/summarize", fetchOptions({
     method: "POST",
