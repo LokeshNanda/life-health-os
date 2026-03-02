@@ -1,16 +1,18 @@
-import { clerkMiddleware } from "@clerk/nextjs/server";
+import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
 
-// Force sign-in for all routes except Clerk auth pages (pathname-based to avoid matcher quirks)
-function isPublicPath(pathname: string): boolean {
-  return pathname.startsWith("/sign-in") || pathname.startsWith("/sign-up");
-}
+// Routes that don't require sign-in
+const isPublicRoute = createRouteMatcher([
+  "/",
+  "/sign-in(.*)",
+  "/sign-up(.*)",
+]);
 
 export default clerkMiddleware(async (auth, req) => {
   if (process.env.E2E_BYPASS_AUTH === "true") return;
 
-  const pathname = req.nextUrl.pathname;
-  if (!isPublicPath(pathname)) {
-    await auth.protect();
+  if (!isPublicRoute(req)) {
+    const signInUrl = new URL("/sign-in", req.nextUrl.origin);
+    await auth.protect({ unauthenticatedUrl: signInUrl.href });
   }
 });
 
