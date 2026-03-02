@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { summarize, getMemoryStats, downloadSummary, getSummaryVersions, getSummaryByVersion, type SummaryVersionItem } from "@/lib/api";
 import { SummarizeSkeleton } from "@/components/Skeleton";
 import { Download, FileText, ChevronDown, ChevronUp } from "lucide-react";
+import { MarkdownViewer } from "@/components/MarkdownViewer";
 
 const CATEGORIES = [
   "note",
@@ -339,9 +340,7 @@ export default function SummarizePage() {
           {viewingVersion != null && viewContent != null && (
             <div className="mt-4 rounded-lg border border-white/10 bg-midnight/80 p-4 max-h-80 overflow-y-auto">
               <p className="text-xs text-[var(--text-muted)] mb-2">Version {viewingVersion}</p>
-              <pre className="whitespace-pre-wrap text-sm text-[var(--text-primary)] font-sans">
-                {viewContent}
-              </pre>
+              <MarkdownViewer content={viewContent} className="font-sans" />
             </div>
           )}
         </div>

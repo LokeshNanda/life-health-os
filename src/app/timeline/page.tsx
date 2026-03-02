@@ -8,6 +8,7 @@ import type { ExportFormat } from "@/lib/api";
 import type { HealthEvent, DataCategory } from "@/lib/types";
 import { Trash2, Search, Download, Pencil, Undo2, Star } from "lucide-react";
 import { TimelineSkeleton } from "@/components/Skeleton";
+import { MarkdownViewer } from "@/components/MarkdownViewer";
 
 const CATEGORIES: (DataCategory | "all")[] = [
   "all",
@@ -533,11 +534,11 @@ export default function TimelinePage() {
                   </span>
                 )}
                 <div className="mt-1">
-                  <p
-                    className={`text-sm text-[var(--text-primary)] whitespace-pre-wrap ${!expandedContentIds.has(event.id) && isContentLong(event.content) ? "line-clamp-3" : ""}`}
+                  <div
+                    className={`text-sm text-[var(--text-primary)] ${!expandedContentIds.has(event.id) && isContentLong(event.content) ? "line-clamp-3" : ""}`}
                   >
-                    {event.content}
-                  </p>
+                    <MarkdownViewer content={event.content} />
+                  </div>
                   {isContentLong(event.content) && (
                     <button
                       type="button"

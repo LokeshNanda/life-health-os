@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { getChatSessions, getChatSession, deleteChatSession, getTags, type ChatSessionMeta } from "@/lib/api";
 import { MessageSquarePlus, Trash2, MessageCircle } from "lucide-react";
+import { MarkdownViewer } from "@/components/MarkdownViewer";
 
 interface Citation {
   id: string;
@@ -362,7 +363,7 @@ export default function ChatPage() {
                     : "bg-midnight-charcoal/80 text-[var(--text-primary)] border border-white/10"
                 }`}
               >
-                {m.content}
+                {m.role === "user" ? m.content : <MarkdownViewer content={m.content} />}
               </div>
               {m.role === "assistant" && m.citations && m.citations.length > 0 && (
                 <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[var(--text-muted)]">

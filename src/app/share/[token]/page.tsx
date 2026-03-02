@@ -3,6 +3,7 @@
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import type { HealthEvent } from "@/lib/types";
+import { MarkdownViewer } from "@/components/MarkdownViewer";
 
 interface SummaryPayload {
   content: string;
@@ -76,9 +77,7 @@ export default function SharePage() {
             <h2 className="text-lg font-medium text-[var(--text-primary)] mb-2">
               Summary (v{summary.version})
             </h2>
-            <p className="text-sm text-[var(--text-muted)] whitespace-pre-wrap">
-              {summary.content}
-            </p>
+            <MarkdownViewer content={summary.content} className="text-[var(--text-muted)]" />
           </section>
         )}
 
@@ -103,9 +102,9 @@ export default function SharePage() {
                       {new Date(event.timestamp).toLocaleDateString()}
                     </span>
                   </div>
-                  <p className="text-sm text-[var(--text-primary)] whitespace-pre-wrap">
-                    {event.content}
-                  </p>
+                  <div className="text-sm text-[var(--text-primary)]">
+                    <MarkdownViewer content={event.content} />
+                  </div>
                 </li>
               ))}
             </ul>
