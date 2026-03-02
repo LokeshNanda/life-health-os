@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
-import { clearChatContext } from "@/lib/api";
-import { RotateCcw } from "lucide-react";
+import { useState, useEffect, useCallback } from "react";
+import { getChatSessions, getChatSession, deleteChatSession, type ChatSessionMeta } from "@/lib/api";
+import { MessageSquarePlus, Trash2, MessageCircle } from "lucide-react";
 
 interface Citation {
   id: string;
@@ -29,7 +29,46 @@ export default function ChatPage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [clearing, setClearing] = useState(false);
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [sessions, setSessions] = useState<ChatSessionMeta[]>([]);
+  const [sessionsLoading, setSessionsLoading] = useState(true);
+
+  const fetchSessions = useCallback(async () => {
+    setSessionsLoading(true);
+    try {
+      const { sessions: list } = await getChatSessions();
+      setSessions(list);
+    } catch {
+      setSessions([]);
+    } finally {
+      setSessionsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchSessions();
+  }, [fetchSessions]);
+
+  const loadSession = useCallback(async (id: string) => {
+    try {
+      const { messages: msgs } = await getChatSession(id);
+      setMessages(msgs.map((m) => ({
+        role: m.role,
+        content: m.content,
+        followUps: m.followUps,
+        citations: m.citations,
+      })));
+      setSessionId(id);
+    } catch {
+      setMessages([]);
+    }
+  }, []);
+
+  function handleNewChat() {
+    setSessionId(null);
+    setMessages([]);
+    setInput("");
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -50,13 +89,17 @@ export default function ChatPage() {
             "x-user-id": process.env.NEXT_PUBLIC_DEV_USER_ID,
           }),
         },
-        body: JSON.stringify({ message: userMessage }),
+        body: JSON.stringify({ message: userMessage, sessionId: sessionId ?? undefined }),
       });
       const data = await res.json();
       const text = data.text ?? (data.error ? `Error: ${data.error}` : "No response.");
       const followUps = Array.isArray(data.followUps) ? data.followUps : undefined;
       const citations = Array.isArray(data.citations) ? data.citations : undefined;
       setMessages((prev) => [...prev, { role: "assistant", content: text, followUps, citations }]);
+      if (data.sessionId) {
+        setSessionId(data.sessionId);
+        fetchSessions();
+      }
     } catch (err) {
       setMessages((prev) => [
         ...prev,
@@ -70,35 +113,78 @@ export default function ChatPage() {
     }
   }
 
-  async function handleClearContext() {
-    if (clearing || messages.length === 0) return;
-    setClearing(true);
+  async function handleDeleteSession(e: React.MouseEvent, id: string) {
+    e.stopPropagation();
+    if (!confirm("Delete this conversation?")) return;
     try {
-      await clearChatContext();
-      setMessages([]);
-      setInput("");
-    } finally {
-      setClearing(false);
+      await deleteChatSession(id);
+      if (sessionId === id) {
+        setSessionId(null);
+        setMessages([]);
+      }
+      fetchSessions();
+    } catch {
+      // ignore
     }
   }
 
   return (
-    <div className="mx-auto max-w-2xl flex flex-col h-[calc(100vh-4rem)] animate-fade-slide-up">
+    <div className="mx-auto max-w-4xl flex gap-4 h-[calc(100vh-4rem)] animate-fade-slide-up">
+      <aside className="w-52 shrink-0 flex flex-col border border-white/10 rounded-xl bg-midnight-charcoal/50 overflow-hidden">
+        <button
+          type="button"
+          onClick={handleNewChat}
+          className="flex items-center gap-2 px-3 py-2.5 text-sm font-medium text-neon-cyan border-b border-white/10 hover:bg-white/5 transition-colors"
+        >
+          <MessageSquarePlus className="h-4 w-4" />
+          New chat
+        </button>
+        <div className="flex-1 overflow-y-auto min-h-0">
+          {sessionsLoading ? (
+            <p className="px-3 py-2 text-xs text-[var(--text-muted)]">Loading...</p>
+          ) : sessions.length === 0 ? (
+            <p className="px-3 py-2 text-xs text-[var(--text-muted)]">No conversations yet</p>
+          ) : (
+            <ul className="py-1">
+              {sessions.map((s) => (
+                <li
+                  key={s.id}
+                  className={`flex items-center gap-2 w-full border-l-2 transition-colors ${
+                    sessionId === s.id
+                      ? "border-neon-cyan bg-neon-cyan/10"
+                      : "border-transparent"
+                  }`}
+                >
+                  <button
+                    type="button"
+                    onClick={() => loadSession(s.id)}
+                    className={`flex-1 flex items-center gap-2 px-3 py-2 text-left text-sm min-w-0 text-[var(--text-primary)] hover:bg-white/5 transition-colors ${
+                      sessionId !== s.id ? "text-[var(--text-muted)]" : ""
+                    }`}
+                  >
+                    <MessageCircle className="h-3.5 w-3.5 shrink-0" />
+                    <span className="truncate">{s.title || "Chat"}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={(e) => handleDeleteSession(e, s.id)}
+                    className="shrink-0 p-1 rounded hover:bg-red-500/20 text-[var(--text-muted)] hover:text-red-400"
+                    title="Delete conversation"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </aside>
+
+      <div className="flex-1 flex flex-col min-w-0">
       <h1 className="text-2xl font-semibold text-[var(--text-primary)] mb-2">AI Chat</h1>
       <p className="text-[var(--text-muted)] mb-4">
         Ask questions about your health records. AI answers only from your data.
       </p>
-      {messages.length > 0 && (
-        <button
-          type="button"
-          onClick={handleClearContext}
-          disabled={clearing || isLoading}
-          className="mb-2 flex items-center gap-2 rounded-lg border border-white/20 px-3 py-1.5 text-sm text-[var(--text-muted)] hover:bg-white/5 hover:text-[var(--text-primary)] disabled:opacity-50 transition-all"
-        >
-          <RotateCcw className="h-4 w-4" />
-          {clearing ? "Clearing..." : "Clear conversation context"}
-        </button>
-      )}
 
       <div className="glass-panel glass-panel-glow rounded-xl flex-1 flex flex-col overflow-hidden">
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
@@ -193,6 +279,7 @@ export default function ChatPage() {
             Send
           </button>
         </form>
+      </div>
       </div>
     </div>
   );

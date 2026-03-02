@@ -4,6 +4,9 @@
  * user:{userId}:ai_context - Redis String / JSON
  * user:{userId}:summary:{version} - Redis JSON
  * user:{userId}:meta - Redis Hash
+ * user:{userId}:chat_sessions - ZSET (score = updatedAt ms, member = sessionId)
+ * user:{userId}:chat_session:{sessionId} - Hash (title, createdAt, updatedAt)
+ * user:{userId}:chat_session:{sessionId}:messages - List (JSON messages, chronological)
  */
 
 export const keys = {
@@ -13,4 +16,9 @@ export const keys = {
   meta: (userId: string) => `user:${userId}:meta`,
   summaryVersions: (userId: string) => `user:${userId}:summary_versions`,
   deleted: (userId: string) => `user:${userId}:deleted`,
+  chatSessionsZset: (userId: string) => `user:${userId}:chat_sessions`,
+  chatSessionMeta: (userId: string, sessionId: string) =>
+    `user:${userId}:chat_session:${sessionId}`,
+  chatSessionMessages: (userId: string, sessionId: string) =>
+    `user:${userId}:chat_session:${sessionId}:messages`,
 } as const;

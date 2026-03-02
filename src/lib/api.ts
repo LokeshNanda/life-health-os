@@ -145,3 +145,36 @@ export async function clearChatContext() {
   if (!res.ok) throw new Error("Failed to clear context");
   return res.json();
 }
+
+export interface ChatSessionMeta {
+  id: string;
+  title: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export async function getChatSessions(): Promise<{ sessions: ChatSessionMeta[] }> {
+  const res = await fetch("/api/chat/sessions", fetchOptions());
+  if (!res.ok) throw new Error("Failed to fetch sessions");
+  return res.json();
+}
+
+export async function getChatSession(sessionId: string): Promise<{
+  session: ChatSessionMeta;
+  messages: { role: "user" | "assistant"; content: string; followUps?: string[]; citations?: { id: string; category: string; date: string }[]; createdAt: string }[];
+}> {
+  const res = await fetch(`/api/chat/sessions/${encodeURIComponent(sessionId)}`, fetchOptions());
+  if (!res.ok) {
+    if (res.status === 404) throw new Error("Session not found");
+    throw new Error("Failed to load session");
+  }
+  return res.json();
+}
+
+export async function deleteChatSession(sessionId: string): Promise<{ status: string; sessionId: string }> {
+  const res = await fetch(`/api/chat/sessions/${encodeURIComponent(sessionId)}`, fetchOptions({
+    method: "DELETE",
+  }));
+  if (!res.ok) throw new Error("Failed to delete session");
+  return res.json();
+}

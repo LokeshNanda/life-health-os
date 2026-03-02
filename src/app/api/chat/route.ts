@@ -10,9 +10,15 @@ import { NextResponse } from "next/server";
 import OpenAI from "openai";
 import { getUserId } from "@/lib/auth";
 import { isAllowedForOpenAI } from "@/lib/openai-access";
-import { getEvents, getLatestSummary, getAiContext, setAiContext } from "@/lib/data";
-
-const AI_CONTEXT_MAX_SIZE = 16 * 1024; // 16KB rolling conversation buffer
+import { getEvents, getLatestSummary } from "@/lib/data";
+import {
+  createChatSession,
+  getChatSessionMessages,
+  buildSessionContext,
+  appendChatMessages,
+  sessionTitleFromMessage,
+} from "@/lib/chat-sessions";
+import type { StoredChatMessage } from "@/lib/types";
 
 const SYSTEM_PROMPT = `You are a personal health memory assistant. You help users organize and query their health records.
 
@@ -28,7 +34,7 @@ CRITICAL RULES - YOU MUST FOLLOW:
 function buildContext(
   events: { id: string; category: string; content: string; timestamp: string }[],
   summary: { content: string } | null,
-  aiContext: string | null
+  sessionContext: string | null
 ): string {
   const parts: string[] = [];
 
@@ -36,8 +42,8 @@ function buildContext(
     parts.push("## Latest Summary\n" + summary.content);
   }
 
-  if (aiContext) {
-    parts.push("## AI Working Memory\n" + aiContext);
+  if (sessionContext) {
+    parts.push("## Conversation so far\n" + sessionContext);
   }
 
   parts.push("## Raw Health Events (chronological)\nEach event has a number in parentheses; cite these numbers when you use that event.\n");
@@ -64,7 +70,7 @@ function parseCitedIds(text: string): { text: string; citedNumbers: number[] } {
 export async function POST(request: Request) {
   try {
     const userId = await getUserId(request);
-    let body: { message?: string };
+    let body: { message?: string; sessionId?: string | null };
     try {
       body = await request.json();
     } catch {
@@ -73,7 +79,7 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
-    const { message } = body;
+    const { message, sessionId: bodySessionId } = body;
 
     if (!message || typeof message !== "string") {
       return NextResponse.json(
@@ -89,19 +95,34 @@ export async function POST(request: Request) {
       );
     }
 
-    const [events, summary, aiContext] = await Promise.all([
+    const [events, summary] = await Promise.all([
       getEvents(userId),
       getLatestSummary(userId),
-      getAiContext(userId),
     ]);
 
-    const context = buildContext(events, summary, aiContext);
+    let sessionId: string;
+    let sessionMessages: StoredChatMessage[] = [];
 
-    if (!context.trim() || (events.length === 0 && !summary && !aiContext)) {
+    if (bodySessionId && typeof bodySessionId === "string") {
+      sessionId = bodySessionId;
+      sessionMessages = await getChatSessionMessages(userId, sessionId);
+    } else {
+      const meta = await createChatSession(
+        userId,
+        sessionTitleFromMessage(message)
+      );
+      sessionId = meta.id;
+    }
+
+    const sessionContext = buildSessionContext(sessionMessages);
+    const context = buildContext(events, summary, sessionContext);
+
+    if (!context.trim() || (events.length === 0 && !summary?.content && !sessionContext)) {
       return NextResponse.json({
         text: "I don't have any health records for you yet. Add memories (documents, notes, lab results) to get started.",
         followUps: [],
         citations: [],
+        sessionId,
       });
     }
 
@@ -110,6 +131,7 @@ export async function POST(request: Request) {
         text: "AI is not configured. Set OPENAI_API_KEY to enable chat.",
         followUps: [],
         citations: [],
+        sessionId,
       });
     }
 
@@ -152,15 +174,27 @@ export async function POST(request: Request) {
         };
       });
 
-    // Append to conversation memory for multi-turn context
-    const exchange = `User: ${message}\nAssistant: ${text}\n\n`;
-    const newContext = (aiContext ?? "") + exchange;
-    const truncated = newContext.length > AI_CONTEXT_MAX_SIZE
-      ? newContext.slice(-AI_CONTEXT_MAX_SIZE)
-      : newContext;
-    await setAiContext(userId, truncated);
+    const now = new Date().toISOString();
+    await appendChatMessages(
+      userId,
+      sessionId,
+      [
+        { role: "user", content: message, createdAt: now },
+        {
+          role: "assistant",
+          content: text,
+          followUps,
+          citations,
+          createdAt: now,
+        },
+      ],
+      {
+        title: sessionMessages.length === 0 ? sessionTitleFromMessage(message) : undefined,
+        updateTimestamp: true,
+      }
+    );
 
-    return NextResponse.json({ text, followUps, citations });
+    return NextResponse.json({ text, followUps, citations, sessionId });
   } catch (err) {
     if (err instanceof Error && err.message.includes("Unauthorized")) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

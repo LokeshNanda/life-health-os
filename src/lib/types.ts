@@ -39,3 +39,25 @@ export interface CategoryBreakdown {
   count: number;
   size: number;
 }
+
+export interface ChatSessionMeta {
+  id: string;
+  title: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ChatCitation {
+  id: string;
+  category: string;
+  date: string;
+}
+
+/** One message as stored in Redis (role + content + optional followUps/citations). */
+export interface StoredChatMessage {
+  role: "user" | "assistant";
+  content: string;
+  followUps?: string[];
+  citations?: ChatCitation[];
+  createdAt: string;
+}

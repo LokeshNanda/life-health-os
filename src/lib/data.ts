@@ -5,7 +5,14 @@
 
 import { redis } from "./redis";
 import { keys } from "./schema";
-import type { HealthEvent, Summary, MemoryStats, DataCategory } from "./types";
+import type {
+  HealthEvent,
+  Summary,
+  MemoryStats,
+  DataCategory,
+  ChatSessionMeta,
+  StoredChatMessage,
+} from "./types";
 
 const AI_CONTEXT_MAX_SIZE = 16 * 1024; // 16KB bounded context
 
